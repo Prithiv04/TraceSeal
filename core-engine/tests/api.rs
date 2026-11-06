@@ -129,6 +129,32 @@ async fn health_check_returns_pass() {
     assert_eq!(json["trust_policy_id"], "demo-local-v1");
 }
 
+#[tokio::test]
+async fn frontend_is_served_at_root() {
+    let temp = tempdir().unwrap();
+    let store = EvidenceStore::open(temp.path()).unwrap();
+    let state = Arc::new(AppState::new(store));
+    let app = create_router(state);
+
+    for uri in ["/", "/app"] {
+        let req = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Full::new(Bytes::new()))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE).unwrap(),
+            "text/html; charset=utf-8"
+        );
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(html.contains("TRACESEAL"));
+        assert!(html.contains("/api/v1/evidence"));
+    }
+}
+
 #[test]
 fn loopback_only_default_binding_is_enforced() {
     let default_addr: SocketAddr = "127.0.0.1:3000".parse().unwrap();

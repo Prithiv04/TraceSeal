@@ -815,10 +815,7 @@ fn validate_verification_report(
         || report.verifier.exit_code != Some(0)
         || !report.errors.is_empty()
         || report.verifier.version.is_empty()
-        || report
-            .trust_policy_id
-            .as_deref()
-            .is_none_or(str::is_empty)
+        || report.trust_policy_id.as_deref().is_none_or(str::is_empty)
         || (original
             && (report.verifier.version != payload.verification.verifier_version
                 || report.trust_policy_id.as_deref() != Some(payload.trust_policy_id.as_str())))

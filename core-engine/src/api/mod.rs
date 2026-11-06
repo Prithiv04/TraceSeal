@@ -6,6 +6,7 @@ pub use error::ApiError;
 pub use models::*;
 
 use axum::{
+    response::Html,
     routing::{get, post},
     Router,
 };
@@ -14,6 +15,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::storage::EvidenceStore;
+
+const FRONTEND_HTML: &str = include_str!("../../frontend/index.html");
+
+async fn frontend() -> Html<&'static str> {
+    Html(FRONTEND_HTML)
+}
 
 /// Shared application state for the API.
 #[derive(Clone)]
