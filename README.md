@@ -91,6 +91,8 @@ Endpoints:
 
 The frontend submits real multipart uploads, displays verification outcomes, disclosed fields, artifact download links, and verification history, and surfaces backend errors. It contains no mock data.
 
+For a guided walkthrough see `docs/SPONSOR_DEMO.md` (demonstration script) and `docs/DEMO_RUNBOOK.md` (exact startup commands). The end-to-end architecture is summarized in `docs/SPONSOR_DEMO.md` with a Mermaid diagram.
+
 ## Phase 3 Step E: local evidence storage
 
 The library exposes `engine::verify_and_package`, which returns a `VerifiedEvidence` only after the controlled TLSNotary verifier succeeds and the Step C evidence payload and exact artifact hashes validate. Its fields and constructor are private; callers cannot pass a client report, `VERIFIED` flag, evidence ID, commitment, or filesystem path to the storage API. The prior `verify_and_identify` API remains available for callers that only need the identity record.
