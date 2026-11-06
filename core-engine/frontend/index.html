@@ -483,21 +483,29 @@ input.invalid{border-color:var(--err)}
 .complete-label b{color:var(--muted)}
 
 /* ================= Docs ================= */
-.doc-section{margin-bottom:var(--s6)}
-.doc-section h2{
-  font-size:var(--fs-section);font-weight:700;margin:0 0 var(--s3);
+.doc-section{margin-bottom:0}
+.doc-section > :last-child{margin-bottom:0}
+.doc-head{
   display:flex;align-items:center;gap:var(--s3);
+  margin-bottom:var(--s4);
 }
-.doc-section h2 .num{
+.doc-head .num{
+  width:2.5rem;height:1.85rem;flex-shrink:0;
+  display:grid;place-items:center;
   font-family:var(--mono);font-size:var(--fs-meta);color:var(--cyan);
   background:var(--cyan-dim);border:1px solid var(--border-strong);
-  border-radius:6px;padding:.18rem .55rem;
+  border-radius:6px;
 }
-.doc-section p,.doc-section li{color:var(--muted);font-size:var(--fs-small);max-width:72ch}
-.doc-section ul,.doc-section ol{padding-left:1.3rem}
-.doc-section li{margin:.3rem 0}
+.doc-head h2{margin:0;font-size:var(--fs-section);font-weight:700;line-height:1.3}
+.doc-section > *:not(.doc-head):not(ul):not(ol){padding-left:calc(2.5rem + var(--s3))}
+.doc-section p{color:var(--muted);font-size:var(--fs-small);max-width:72ch;margin:.4rem 0}
+.doc-section p:first-of-type{margin-top:0}
+.doc-section > ul,.doc-section > ol{padding-left:calc(1.3rem + 2.5rem + var(--s3));margin:.4rem 0}
+.doc-section li{margin:.35rem 0;color:var(--muted);font-size:var(--fs-small);max-width:72ch}
+.doc-section li::marker{color:var(--cyan)}
 .doc-section strong{color:var(--text)}
-.doc-section .table-wrap{max-width:100%}
+.doc-section .table-wrap{margin-top:var(--s4);max-width:100%}
+.doc-section .table-wrap + p{margin-top:var(--s4)}
 .endpoint-table td:first-child{white-space:nowrap}
 
 /* ================= Network status card ================= */
@@ -771,17 +779,17 @@ input.invalid{border-color:var(--err)}
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">01</span>What TRACESEAL is</h2>
+          <div class="doc-head"><span class="num">01</span><h2>What TRACESEAL is</h2></div>
           <p>TRACESEAL is a local-first system that converts a live HTTPS response into <strong>cryptographically verifiable evidence</strong>. It uses <a href="https://tlsnotary.org" target="_blank" rel="noopener">TLSNotary</a> MPC-TLS: a prover and a notary jointly produce an attestation of a TLS session, and a presentation selectively discloses only chosen response fields.</p>
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">02</span>The problem it solves</h2>
+          <div class="doc-head"><span class="num">02</span><h2>The problem it solves</h2></div>
           <p>APIs can claim anything in a response. TRACESEAL produces a proof that a specific HTTPS exchange happened with a specific server, revealing only the fields you choose — enabling audit trails, compliance evidence, and dispute resolution without exposing full transcripts.</p>
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">03</span>How TLSNotary verification works</h2>
+          <div class="doc-head"><span class="num">03</span><h2>How TLSNotary verification works</h2></div>
           <ol>
             <li><strong>Prove</strong> — <code>traceseal-core prove</code> connects to the fixture over MPC-TLS, requests a URL, and builds a presentation disclosing selected JSON fields.</li>
             <li><strong>Verify</strong> — a separate <code>traceseal-core verify</code> process checks the attestation signature (pinned demo key), the presentation binding, the server name, and the disclosed transcript.</li>
@@ -790,7 +798,7 @@ input.invalid{border-color:var(--err)}
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">04</span>Evidence package format</h2>
+          <div class="doc-head"><span class="num">04</span><h2>Evidence package format</h2></div>
           <p>Three files, submitted as multipart fields:</p>
           <div class="table-wrap"><table>
             <thead><tr><th>Field</th><th>File</th><th>Max size</th><th>Content</th></tr></thead>
@@ -803,7 +811,7 @@ input.invalid{border-color:var(--err)}
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">05</span>Evidence lifecycle</h2>
+          <div class="doc-head"><span class="num">05</span><h2>Evidence lifecycle</h2></div>
           <div class="lifecycle">
             <div class="lc-step done"><div class="lc-dot">1</div><div class="lc-title">Submit</div><div class="lc-desc">multipart upload</div></div>
             <div class="lc-step done"><div class="lc-dot">2</div><div class="lc-title">Verify</div><div class="lc-desc">verifier subprocess</div></div>
@@ -814,12 +822,12 @@ input.invalid{border-color:var(--err)}
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">06</span>Evidence ID and commitment</h2>
+          <div class="doc-head"><span class="num">06</span><h2>Evidence ID and commitment</h2></div>
           <p>The evidence ID is <code>ts1_</code> + the first 64 hex chars of a SHA-256 over a <strong>domain-separated canonical payload</strong> (<code>TRACESEAL:EVIDENCE:V1\0</code> prefix, RFC 8785 JCS canonicalization). The commitment is the same hash prefixed <code>sha256:</code>. Both are deterministic: identical verified evidence always produces the same ID, and duplicate submissions return <code>already_present</code>.</p>
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">07</span>API endpoints</h2>
+          <div class="doc-head"><span class="num">07</span><h2>API endpoints</h2></div>
           <div class="table-wrap endpoint-table"><table>
             <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
             <tbody>
@@ -835,7 +843,7 @@ input.invalid{border-color:var(--err)}
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">08</span>CLI usage</h2>
+          <div class="doc-head"><span class="num">08</span><h2>CLI usage</h2></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
             <tbody>
@@ -850,7 +858,7 @@ input.invalid{border-color:var(--err)}
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">09</span>Trust model</h2>
+          <div class="doc-head"><span class="num">09</span><h2>Trust model</h2></div>
           <ul>
             <li><strong>Demo attestor key</strong> — a fixed public test key signs attestations. Anyone can forge attestations with it; it is not production trust.</li>
             <li><strong>Pinned verifier</strong> — verification runs the same <code>traceseal-core</code> binary via <code>verify</code>, with TLSNotary <code>v0.1.0-alpha.15</code>.</li>
@@ -860,7 +868,7 @@ input.invalid{border-color:var(--err)}
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">10</span>Limitations</h2>
+          <div class="doc-head"><span class="num">10</span><h2>Limitations</h2></div>
           <ul>
             <li>Single-user local deployment — no authentication, no multi-user ownership.</li>
             <li>No global evidence listing endpoint — lookup requires the <code>ts1_</code> ID.</li>
@@ -871,7 +879,7 @@ input.invalid{border-color:var(--err)}
         </div>
 
         <div class="card doc-section">
-          <h2><span class="num">11</span>Future: Hedera integration</h2>
+          <div class="doc-head"><span class="num">11</span><h2>Future: Hedera integration</h2></div>
           <p>Planned: anchor the evidence commitment to Hedera HCS so the commitment is timestamped by a public ledger. Requires HBAR-funded operator credentials, a topic ID, and mirror-node lookup for comparison. <strong>Not implemented</strong> — no testnet transactions exist yet.</p>
         </div>
       </section>
