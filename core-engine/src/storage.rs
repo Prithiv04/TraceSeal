@@ -959,7 +959,10 @@ fn now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{engine::tests::test_verified_evidence, evidence::ArtifactHashes};
+    use crate::{
+        engine::tests::{test_verified_evidence, test_verified_evidence_with_report},
+        evidence::ArtifactHashes,
+    };
     use tempfile::tempdir;
 
     #[test]
@@ -1276,5 +1279,84 @@ mod tests {
             .unwrap()
             .next()
             .is_none());
+    }
+
+    #[test]
+    fn rejected_and_nonzero_exit_reports_cannot_be_recorded_and_preserve_history() {
+        let directory = tempdir().unwrap();
+        let store = EvidenceStore::open(directory.path()).unwrap();
+        let valid = test_verified_evidence();
+        let receipt = store.store(&valid).unwrap();
+
+        // 1. A REJECTED verification report cannot be stored initially
+        let rejected_initial = test_verified_evidence_with_report(|r| {
+            r.verification_status = "REJECTED".into();
+        });
+        assert!(matches!(
+            store.store(&rejected_initial),
+            Err(StorageError::Corrupt)
+        ));
+
+        // 2. A verification report with a non-zero exit code cannot be stored initially
+        let nonzero_initial = test_verified_evidence_with_report(|r| {
+            r.verifier.exit_code = Some(1);
+        });
+        assert!(matches!(
+            store.store(&nonzero_initial),
+            Err(StorageError::Corrupt)
+        ));
+
+        // 3. A REJECTED verification report cannot be recorded as a re-verification
+        let rejected_reverify = test_verified_evidence_with_report(|r| {
+            r.verification_status = "REJECTED".into();
+            r.verified_at = "2026-11-06T02:00:00.000Z".into();
+        });
+        assert!(matches!(
+            store.record_reverification(rejected_reverify),
+            Err(StorageError::Corrupt)
+        ));
+
+        // 4. A verification report with a non-zero exit code cannot be recorded as a re-verification
+        let nonzero_reverify = test_verified_evidence_with_report(|r| {
+            r.verifier.exit_code = Some(1);
+            r.verified_at = "2026-11-06T02:01:00.000Z".into();
+        });
+        assert!(matches!(
+            store.record_reverification(nonzero_reverify),
+            Err(StorageError::Corrupt)
+        ));
+
+        // 5. A verification report with errors cannot be recorded as a re-verification
+        let with_errors = test_verified_evidence_with_report(|r| {
+            r.errors = vec!["verifier reported an error".into()];
+            r.verified_at = "2026-11-06T02:02:00.000Z".into();
+        });
+        assert!(matches!(
+            store.record_reverification(with_errors),
+            Err(StorageError::Corrupt)
+        ));
+
+        // 6. Failed re-verification does not modify existing verification history
+        let metadata = store.get_metadata(&receipt.evidence_id).unwrap();
+        assert_eq!(
+            metadata.original_verification.verified_at,
+            "2026-11-06T01:57:09.859Z"
+        );
+        assert_eq!(
+            metadata.original_verification.verification_status,
+            "VERIFIED"
+        );
+        assert_eq!(metadata.original_verification.verifier.exit_code, Some(0));
+        assert!(metadata.reverifications.is_empty());
+
+        let connection = store.connect().unwrap();
+        let total_verifications: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM verification_records WHERE evidence_id = ?1",
+                [&receipt.evidence_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(total_verifications, 1);
     }
 }

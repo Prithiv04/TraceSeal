@@ -377,6 +377,19 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
         tampered_identity,
         Err(VerificationError::Rejected)
     ));
+    let tampered_package_result = verify_and_package(
+        EvidencePackage {
+            attestation: &attestation_bytes,
+            presentation: &tampered_presentation,
+            request_manifest: &manifest_bytes,
+        },
+        Duration::from_secs(30),
+    )
+    .await;
+    assert!(matches!(
+        tampered_package_result,
+        Err(VerificationError::Rejected)
+    ));
     let rejected = verify(&valid_att, &tampered);
     assert!(!rejected.status.success());
     let rejection: EvidenceReport = serde_json::from_slice(&rejected.stdout).unwrap();
@@ -489,6 +502,8 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
         verified_200.record().payload().proof.presentation_sha256
     );
     assert!(reopened.record_reverification(verified_200).is_err());
+    let after_failed_reverify = reopened.get_metadata(&receipt.evidence_id).unwrap();
+    assert_eq!(after_failed_reverify.reverifications.len(), 1);
 
     let result_404 = run_prove(
         exe,

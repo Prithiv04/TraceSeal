@@ -443,13 +443,21 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn test_verified_evidence() -> VerifiedEvidence<'static> {
+        test_verified_evidence_with_report(|_| {})
+    }
+
+    pub(crate) fn test_verified_evidence_with_report(
+        mut transform: impl FnMut(&mut EvidenceReport),
+    ) -> VerifiedEvidence<'static> {
         let package = EvidencePackage {
             attestation: ATTESTATION,
             presentation: PRESENTATION,
             request_manifest: MANIFEST,
         };
         let manifest = parse_manifest(MANIFEST).unwrap();
-        build_identity(package, &manifest, report()).unwrap()
+        let mut report = report();
+        transform(&mut report);
+        build_identity(package, &manifest, report).unwrap()
     }
 
     #[test]
