@@ -1,13 +1,13 @@
 # TRACESEAL
 
-TRACESEAL Phase 1 established TLSNotary feasibility. Phase 2 adds a local Rust Core Engine around the pinned TLSNotary attestation and presentation APIs. It is a controlled demonstration, not a production trust service.
+TRACESEAL Phase 1 established TLSNotary feasibility. Phase 2 adds a local Rust Core Engine around the pinned TLSNotary attestation and presentation APIs. Phase 3 Steps C-E add verifier-derived evidence identity and local persistent storage. This remains a controlled demonstration, not a production trust service.
 
 ## Current scope
 
 - TLSNotary Rust crates are pinned to `v0.1.0-alpha.15` (Git revision `47aee45b`). The separate `tlsnotary/` checkout remains at `d446234`, package version `0.1.0-alpha.15`.
 - The CLI supports only `GET https://localhost:4443/trace-seal-{503,200,404,delay}` and only a finite set of explicit top-level response fields (`status`, `error`, `service`, `message`). It does not claim arbitrary public-site compatibility.
 - The fixture serves deterministic TLS 1.2 responses. TLS 1.3 compatibility has not been tested or claimed.
-- No frontend, application backend, or Hedera integration is implemented.
+- The Rust library has a local SQLite/filesystem evidence store. No HTTP API, authentication/ownership system, frontend, or Hedera integration is implemented.
 
 ## Build and test
 
@@ -21,7 +21,9 @@ cargo build --locked --manifest-path core-engine/Cargo.toml
 cargo test --locked --manifest-path core-engine/Cargo.toml
 ```
 
-The integration test starts the controlled HTTPS fixture, conducts actual TLSNotary MPC-TLS proving, serializes an attestation and presentation, and starts a separate CLI verifier process. It also exercises HTTP 503/200/404, selected field disclosure, tampering, invalid/missing/malformed files, process startup failure/timeout, untrusted TLS, and unavailable fixture behavior.
+The integration test starts the controlled HTTPS fixture, conducts actual TLSNotary MPC-TLS proving, serializes an attestation and presentation, and starts a separate CLI verifier process. It also exercises HTTP 503/200/404, selected field disclosure, tampering, invalid/missing/malformed files, process startup failure/timeout, untrusted TLS, and unavailable fixture behavior. Storage tests cover SQLite initialization/reopen, exact-byte persistence, duplicate and concurrent submissions, immutable original verification records, separate reverification records, orphan recovery, database/artifact tampering, path traversal, and symlinks.
+
+The crate's SQLite dependency is bundled and pinned so storage tests can run offline after the locked dependencies have been fetched once.
 
 ## Reproducible local demo
 
@@ -71,3 +73,31 @@ The notary and prover run in the same local demo CLI process; only the presentat
 Phase 1 artifacts remain in `phase1-artifacts/` with their original SHA-256 hashes documented in `docs/TECHNICAL_FEASIBILITY.md`. The root `.gitignore` excludes the workspace toolchain and nested upstream checkout; it does not exclude those Phase 1 artifacts.
 
 The retained Phase 2 CLI demonstration is in `phase2-artifacts/1793930213453613000-20468/`; it contains the genuine 503 attestation/presentation, request manifest, and successful separate-verifier report.
+
+## Phase 3 Step E: local evidence storage
+
+The library exposes `engine::verify_and_package`, which returns a `VerifiedEvidence` only after the controlled TLSNotary verifier succeeds and the Step C evidence payload and exact artifact hashes validate. Its fields and constructor are private; callers cannot pass a client report, `VERIFIED` flag, evidence ID, commitment, or filesystem path to the storage API. The prior `verify_and_identify` API remains available for callers that only need the identity record.
+
+Initialize storage with an application-selected root path using `storage::EvidenceStore::open(root)`. Submit only the returned trusted value using `store(&verified)`, and retrieve validated metadata with `get_metadata(id)` or the metadata plus exact original bytes with `get(id)`. The current local layout is:
+
+```text
+<root>/
+  metadata.sqlite3
+  artifacts/<ts1_evidence_id>/
+    attestation.tlsn
+    presentation.tlsn
+    request.json
+  .staging/
+```
+
+SQLite schema version 1 stores the canonical Evidence Schema 1.0 record, searchable verification/proof/hash columns, a `READY` state, and three artifact-reference rows with generated storage keys, exact-byte SHA-256 values, and sizes. The trusted original verifier report is stored separately as an immutable `ORIGINAL` verification record. A subsequent successful `VerifiedEvidence` can be consumed by `record_reverification`; it appends a separate `REVERIFICATION` record and never changes the original, but it must have the same complete `EvidenceRecord`. An identical report cannot be replayed as a new verification record.
+
+That equality is intentional in the approved identity design: the canonical payload committed by Step C contains both `verification.verifier_version` and `trust_policy_id`. Changing either field changes the canonical payload, commitment, and evidence ID. Step D currently accepts only the configured demo verifier and `demo-local-v1`, so it cannot produce a re-verification under a changed verifier version or policy. Do not loosen the storage equality check to attach a different-identity record to the old evidence ID. Supporting trust-policy/key rotation while retaining a stable evidence ID requires a future schema/identity version that separates immutable proof identity from append-only verification/trust assessments.
+
+Files are staged and synced, then published under a generated evidence-ID directory before the SQLite transaction commits. The SQLite `BEGIN IMMEDIATE` transaction is acquired before staging and held through publication, so startup reconciliation and concurrent stores using the same database serialize with active writes. Identical records return `AlreadyPresent` after retrieval integrity checks; conflicting IDs are rejected without overwriting existing files. Startup reconciliation removes application staging entries and canonical evidence-ID directories with no committed database row. Unknown directories are left untouched.
+
+Artifact retrieval rejects missing, symlinked, path-escaping, oversized, or modified files and rechecks file size, artifact SHA-256 values, payload hashes, canonical commitment, and evidence ID. On Unix, the storage root and child directories/files are mode 0700/0600 and directory entries are synced around publication. On Windows, filesystem permissions inherit the parent directory's ACL; this module does not configure or audit ACLs. SQLite and the filesystem are not one atomic transaction: incomplete uncommitted publications are cleaned on startup, while a committed record whose files are later lost or corrupted fails retrieval.
+
+Filesystem safety is not race-proof against another local process that can modify the storage root concurrently. The implementation uses symlink metadata checks and canonical-path checks followed by ordinary path-based opens/reads; a privileged or same-user attacker able to swap filesystem entries between those steps may race a check. Restrictive root permissions/ACLs are part of the local threat boundary. Use an isolated storage directory not writable by untrusted local principals. Database/artifact hashes also do not authenticate both stores against an attacker able to rewrite them consistently.
+
+This is local storage only. There is no HTTP surface, authentication, user ownership, or authorization; callers must not treat a matching evidence ID as access authorization. The current demo attestor key remains public and insecure, and prover/notary operation is not independent. Local hashes and SQLite consistency checks are not authenticated against an attacker who can rewrite both the database and artifact tree. Do not treat this implementation as production-secure or independently attested.

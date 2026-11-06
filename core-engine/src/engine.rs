@@ -57,6 +57,28 @@ pub struct EvidencePackage<'a> {
     pub request_manifest: &'a [u8],
 }
 
+pub struct VerifiedEvidence<'a> {
+    record: EvidenceRecord,
+    original_verification: EvidenceReport,
+    attestation: &'a [u8],
+    presentation: &'a [u8],
+    request_manifest: &'a [u8],
+}
+
+impl<'a> VerifiedEvidence<'a> {
+    pub fn record(&self) -> &EvidenceRecord {
+        &self.record
+    }
+
+    pub(crate) fn artifacts(&self) -> (&'a [u8], &'a [u8], &'a [u8]) {
+        (self.attestation, self.presentation, self.request_manifest)
+    }
+
+    pub(crate) fn original_verification(&self) -> &EvidenceReport {
+        &self.original_verification
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RequestManifest {
@@ -71,6 +93,13 @@ pub async fn verify_and_identify(
     package: EvidencePackage<'_>,
     timeout: Duration,
 ) -> Result<EvidenceRecord, VerificationError> {
+    Ok(verify_and_package(package, timeout).await?.record)
+}
+
+pub async fn verify_and_package<'a>(
+    package: EvidencePackage<'a>,
+    timeout: Duration,
+) -> Result<VerifiedEvidence<'a>, VerificationError> {
     validate_sizes(&package)?;
     if timeout.is_zero() || timeout > Duration::from_secs(MAX_VERIFICATION_SECONDS) {
         return Err(VerificationError::InvalidPackage(
@@ -233,11 +262,12 @@ fn parse_verifier_report(bytes: &[u8]) -> Result<EvidenceReport, VerificationErr
     Ok(report)
 }
 
-fn build_identity(
-    package: EvidencePackage<'_>,
+fn build_identity<'a>(
+    package: EvidencePackage<'a>,
     manifest: &RequestManifest,
     report: EvidenceReport,
-) -> Result<EvidenceRecord, VerificationError> {
+) -> Result<VerifiedEvidence<'a>, VerificationError> {
+    let original_verification = report.clone();
     let request = report
         .verified_request
         .ok_or(VerificationError::InvalidVerifierOutput)?;
@@ -322,12 +352,18 @@ fn build_identity(
             path: request.path,
         },
     };
-    Ok(EvidenceRecord::from_verified_payload(
-        payload,
-        package.attestation,
-        package.presentation,
-        package.request_manifest,
-    )?)
+    Ok(VerifiedEvidence {
+        record: EvidenceRecord::from_verified_payload(
+            payload,
+            package.attestation,
+            package.presentation,
+            package.request_manifest,
+        )?,
+        original_verification,
+        attestation: package.attestation,
+        presentation: package.presentation,
+        request_manifest: package.request_manifest,
+    })
 }
 
 fn expected_verifier_version() -> String {
@@ -339,7 +375,7 @@ fn expected_verifier_version() -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::evidence::{ArtifactHashes, PROOF_FORMAT, TLSNOTARY_VERSION, TRUST_POLICY_ID};
     use crate::{ArtifactInfo, VerifierInfo};
@@ -394,7 +430,7 @@ mod tests {
         let bytes = serde_json::to_vec(report).unwrap();
         let report = parse_verifier_report(&bytes)?;
         let manifest = parse_manifest(MANIFEST)?;
-        build_identity(
+        Ok(build_identity(
             EvidencePackage {
                 attestation: ATTESTATION,
                 presentation: PRESENTATION,
@@ -402,7 +438,18 @@ mod tests {
             },
             &manifest,
             report,
-        )
+        )?
+        .record)
+    }
+
+    pub(crate) fn test_verified_evidence() -> VerifiedEvidence<'static> {
+        let package = EvidencePackage {
+            attestation: ATTESTATION,
+            presentation: PRESENTATION,
+            request_manifest: MANIFEST,
+        };
+        let manifest = parse_manifest(MANIFEST).unwrap();
+        build_identity(package, &manifest, report()).unwrap()
     }
 
     #[test]
@@ -522,6 +569,32 @@ mod tests {
             validate_sizes(&package),
             Err(VerificationError::InvalidPackage(_))
         ));
+    }
+
+    #[test]
+    fn empty_artifacts_cannot_create_a_storage_capable_result() {
+        for package in [
+            EvidencePackage {
+                attestation: b"",
+                presentation: PRESENTATION,
+                request_manifest: MANIFEST,
+            },
+            EvidencePackage {
+                attestation: ATTESTATION,
+                presentation: b"",
+                request_manifest: MANIFEST,
+            },
+            EvidencePackage {
+                attestation: ATTESTATION,
+                presentation: PRESENTATION,
+                request_manifest: b"",
+            },
+        ] {
+            assert!(matches!(
+                validate_sizes(&package),
+                Err(VerificationError::InvalidPackage(_))
+            ));
+        }
     }
 
     #[test]

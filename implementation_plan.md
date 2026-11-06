@@ -21,7 +21,7 @@ The starting workspace was empty. Existing work was not overwritten.
 ### Later phases
 
 - [x] Phase 2: Core Engine local proof pipeline (controlled localhost demo complete; production trust model remains a gate).
-- [ ] Phase 3: evidence backend, secure storage, and canonical evidence commitments.
+- [ ] Phase 3: evidence backend, secure storage, and canonical evidence commitments (Steps A-E implemented with documented limitations; Steps F-H remain separate and unimplemented).
 - [ ] Phase 4: genuine Hedera testnet HCS submission and Mirror Node lookup (requires configured account/topic and credentials).
 - [ ] Phase 5: public receipts, verification, and tampering demonstration integrated with the application.
 - [ ] Phase 6: frontend backed by actual service data.
@@ -29,7 +29,7 @@ The starting workspace was empty. Existing work was not overwritten.
 
 ## Current implementation result
 
-Phase 1 feasibility and the controlled Phase 2 Core Engine vertical slice are demonstrated. No TRACESEAL frontend, application backend, or Hedera functionality has been implemented, and no Hedera transaction exists.
+Phase 1 feasibility, the controlled Phase 2 Core Engine vertical slice, and Phase 3 Steps C-E are implemented. The Core Engine now has verifier-derived evidence identity and local SQLite/filesystem persistence, but no HTTP API, authentication/ownership system, frontend, or Hedera functionality has been implemented, and no Hedera transaction exists.
 
 ### Environment and commands
 
@@ -85,3 +85,18 @@ Phase 1 feasibility and the controlled Phase 2 Core Engine vertical slice are de
 - **Retained CLI demo:** `traceseal-core.exe fixture`; then `traceseal-core.exe prove --url https://localhost:4443/trace-seal-503 --disclose status,error,service,message --output phase2-artifacts`; then a separate `traceseal-core.exe verify --attestation ... --presentation ...`. The report returned `VERIFIED`, actual HTTP 503, and the fixture's four selected fields; the verifier process exit code was 0. Package: `phase2-artifacts/1793930213453613000-20468/`. Attestation SHA-256: `1ceb8878590f9404111fea7d2e6310f9d78cf11e33a1e53bc73a5891e1fe1286`; presentation SHA-256: `608fab65a7b4c41790fce705abd137fde47c299f69fa820067ac3422d7e2f9a3`.
 - Phase 1 artifact hashes remain unchanged: attestation `2BEC862147BD592E179F48A7BC3DB9B4E25501A2658B2998B9E93EE43BA8D99E`; presentation `FC35585F3B8BEE916B5CFF4B637D2329C95947FF98BE8631F138E6CEA63BF3E8`.
 - CLI `--version` and `--help` ran successfully. The fixture/key and attestor are deliberately test-only. The workflow is a controlled local demonstration, not production trust. Hedera Phase 3 remains gated on independent notary governance and key distribution.
+
+## Phase 3 Steps C-E execution result (2026-11-06)
+
+- Step C retains the approved Evidence Schema 1.0, RFC 8785 canonicalization, exact-byte artifact hashes, the `TRACESEAL:EVIDENCE:V1\0` domain separator, and fixed regression vectors.
+- Step D remains the only TLSNotary cryptographic verification path. `verify_and_package` returns a `VerifiedEvidence` with private fields and exact borrowed artifact bytes only after trusted verifier success; `verify_and_identify` remains available for identity-only callers.
+- Step E adds `core-engine/src/storage.rs`: SQLite schema version 1 (`metadata.sqlite3`) plus original artifact bytes under `artifacts/<evidence-id>/`, with private `.staging/` directories. Store operations accept only `VerifiedEvidence`; retrieved artifacts are re-hashed and checked against both SQLite metadata and the canonical record. The original verifier report is immutable; later successful verifications append separate `REVERIFICATION` records.
+- Writes use a SQLite immediate transaction, create-new staging files, synced bytes, no-overwrite publication, and a `READY` row committed only after all three artifact files are published. Reconciliation removes uncommitted staging data and orphan canonical-ID directories while preserving any artifact directory with a committed database record.
+- Schema 1.0 includes `verification.verifier_version` and `trust_policy_id` in the canonical payload and therefore in the commitment/evidence ID. Full-record equality during re-verification is intentional. The current Step D accepts one verifier profile and one demo policy; different profiles produce a different identity or are rejected. Future trust-policy/key rotation with stable evidence identity requires a new schema/identity separation design, not loosening this comparison.
+- Repeated identical submissions return `AlreadyPresent`; conflicting identity rows are rejected. SQLite immediate transactions serialize recovery with active store writes using the same database. Filesystem symlink/canonical checks still have a TOCTOU limitation against local processes able to mutate the storage root; Windows ACLs are inherited, not configured or audited. Storage hashes do not authenticate a database and artifact tree both rewritten by the same attacker.
+- Re-verification rejects a different evidence identity, changed persisted artifact bytes, and exact replay of an already stored verifier report; genuine fresh same-profile re-verification is covered by the localhost integration test.
+- Step E is a local development storage foundation, not production-hardened. Implemented and tested: SQLite persistence, exact artifact bytes, duplicate/conflict handling, integrity checks, immutable original reports, append-only same-profile reverification records, symlink/path checks, and startup recovery under a write lock. Implemented but not fully hardened: local filesystem access control and cross-filesystem crash consistency. Deferred: policy/key rotation identity design, HTTP API (Step F), end-to-end application integration (Step G), and security/release validation (Step H).
+- SQLite uses pinned `rusqlite = 0.37.0` with bundled SQLite to keep builds independent of a platform-installed SQLite library; the locked crates were fetched and validation was run offline.
+- `cargo test --locked --offline --manifest-path core-engine/Cargo.toml` passed: 31 unit tests plus 7 integration tests; 0 failed. The integration suite stored and retrieved a genuine localhost TLSNotary verification and recorded a separate successful reverification.
+- `cargo fmt --manifest-path core-engine/Cargo.toml -- --check` passed.
+- `git diff --check` passed.

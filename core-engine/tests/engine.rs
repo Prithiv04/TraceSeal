@@ -7,8 +7,10 @@ use std::{
 
 use tempfile::tempdir;
 use traceseal_core::{
-    engine::{verify_and_identify, EvidencePackage, VerificationError},
-    prove, run_process_with_timeout, run_verifier, validate_endpoint, verify_files, EvidenceReport,
+    engine::{verify_and_identify, verify_and_package, EvidencePackage, VerificationError},
+    prove, run_process_with_timeout, run_verifier,
+    storage::{EvidenceStore, StoreDisposition},
+    validate_endpoint, verify_files, EvidenceReport,
 };
 
 const KEY: &str = "0101010101010101010101010101010101010101010101010101010101010101";
@@ -245,7 +247,7 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
     let attestation_bytes = fs::read(&valid_att).unwrap();
     let presentation_bytes = fs::read(&valid_pres).unwrap();
     let manifest_bytes = fs::read(package.join("request.json")).unwrap();
-    let verified_identity = verify_and_identify(
+    let verified_identity = verify_and_package(
         EvidencePackage {
             attestation: &attestation_bytes,
             presentation: &presentation_bytes,
@@ -255,7 +257,7 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
     )
     .await
     .expect("actual verifier should authorize evidence identity");
-    let repeated_identity = verify_and_identify(
+    let repeated_identity = verify_and_package(
         EvidencePackage {
             attestation: &attestation_bytes,
             presentation: &presentation_bytes,
@@ -265,14 +267,54 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
     )
     .await
     .expect("identical verified package should have reproducible identity");
-    assert_eq!(verified_identity, repeated_identity);
-    assert_eq!(verified_identity.payload().verification.result, "VERIFIED");
+    assert_eq!(verified_identity.record(), repeated_identity.record());
     assert_eq!(
-        verified_identity.payload().verified_request.path,
+        verified_identity.record().payload().verification.result,
+        "VERIFIED"
+    );
+    assert_eq!(
+        verified_identity.record().payload().verified_request.path,
         "/trace-seal-503"
     );
-    assert_eq!(verified_identity.payload().disclosed_http_status, 503);
-    assert_eq!(verified_identity.payload().trust_policy_id, "demo-local-v1");
+    assert_eq!(
+        verified_identity.record().payload().disclosed_http_status,
+        503
+    );
+    assert_eq!(
+        verified_identity.record().payload().trust_policy_id,
+        "demo-local-v1"
+    );
+
+    let storage_root = temp.path().join("evidence-store");
+    let store = EvidenceStore::open(&storage_root).expect("initialize evidence storage");
+    let receipt = store
+        .store(&verified_identity)
+        .expect("store only the successful verifier result");
+    assert_eq!(receipt.disposition, StoreDisposition::Stored);
+    assert_eq!(
+        receipt.evidence_id,
+        verified_identity.record().evidence_id()
+    );
+    let stored = store.get(&receipt.evidence_id).expect("retrieve evidence");
+    assert_eq!(stored.metadata.record, *verified_identity.record());
+    assert_eq!(stored.artifacts.attestation, attestation_bytes);
+    assert_eq!(stored.artifacts.presentation, presentation_bytes);
+    assert_eq!(stored.artifacts.request_manifest, manifest_bytes);
+
+    let reopened = EvidenceStore::open(&storage_root).expect("reopen evidence storage");
+    let restored = reopened
+        .get(&receipt.evidence_id)
+        .expect("retrieve evidence after storage restart");
+    assert_eq!(restored, stored);
+    let duplicate = reopened
+        .store(&verified_identity)
+        .expect("duplicate evidence is handled idempotently");
+    assert_eq!(duplicate.disposition, StoreDisposition::AlreadyPresent);
+    reopened
+        .record_reverification(repeated_identity)
+        .expect("fresh successful verifier result is recorded separately");
+    let stored_again = reopened.get(&receipt.evidence_id).unwrap();
+    assert_eq!(stored_again.metadata.reverifications.len(), 1);
 
     let timeout_result = verify_and_identify(
         EvidencePackage {
@@ -424,7 +466,7 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
     let attestation_200 = fs::read(package_200.join("attestation.tlsn")).unwrap();
     let presentation_200 = fs::read(package_200.join("presentation.tlsn")).unwrap();
     let manifest_200 = fs::read(package_200.join("request.json")).unwrap();
-    let identity_200 = verify_and_identify(
+    let verified_200 = verify_and_package(
         EvidencePackage {
             attestation: &attestation_200,
             presentation: &presentation_200,
@@ -434,11 +476,19 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
     )
     .await
     .expect("second independently verified proof should receive an identity");
-    assert_ne!(verified_identity.evidence_id(), identity_200.evidence_id());
     assert_ne!(
-        verified_identity.payload().proof.presentation_sha256,
-        identity_200.payload().proof.presentation_sha256
+        verified_identity.record().evidence_id(),
+        verified_200.record().evidence_id()
     );
+    assert_ne!(
+        verified_identity
+            .record()
+            .payload()
+            .proof
+            .presentation_sha256,
+        verified_200.record().payload().proof.presentation_sha256
+    );
+    assert!(reopened.record_reverification(verified_200).is_err());
 
     let result_404 = run_prove(
         exe,

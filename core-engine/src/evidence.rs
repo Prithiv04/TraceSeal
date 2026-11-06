@@ -367,6 +367,17 @@ mod tests {
     }
 
     #[test]
+    fn verifier_version_is_bound_into_identity() {
+        let payload = sample_payload();
+        let original_identity = derive_identity(&payload).unwrap();
+        let mut later_verifier = payload;
+        later_verifier.verification.verifier_version =
+            "traceseal-core 0.2.0; tlsn v0.1.0-alpha.15".into();
+
+        assert_ne!(derive_identity(&later_verifier).unwrap(), original_identity);
+    }
+
+    #[test]
     fn empty_disclosures_are_valid() {
         let mut payload = sample_payload();
         payload.disclosed_fields.clear();

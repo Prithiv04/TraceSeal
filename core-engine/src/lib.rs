@@ -1,6 +1,7 @@
 pub mod engine;
 pub mod evidence;
 pub mod fixture;
+pub mod storage;
 
 use std::{
     collections::BTreeMap,
@@ -46,7 +47,7 @@ const SERVER_ADDR: &str = "127.0.0.1:4443";
 const TRUSTED_DEMO_KEY: &str = "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f";
 const ALLOWED_FIELDS: &[&str] = &["status", "error", "service", "message"];
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceReport {
     pub schema_version: String,
@@ -68,13 +69,13 @@ pub struct EvidenceReport {
     pub verified_request: Option<VerifiedRequest>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArtifactInfo {
     pub identifier: Option<String>,
     pub sha256: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VerifierInfo {
     pub version: String,
