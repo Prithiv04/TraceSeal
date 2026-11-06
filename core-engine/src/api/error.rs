@@ -26,7 +26,6 @@ pub enum ApiError {
     StorageUnavailable,
 }
 
-
 #[derive(Serialize)]
 struct ErrorEnvelope {
     error: ErrorDetail,
@@ -121,7 +120,9 @@ impl From<VerificationError> for ApiError {
         match err {
             VerificationError::InvalidPackage(msg) => Self::InvalidPackage(msg.to_string()),
             VerificationError::Timeout => Self::VerifierTimeout,
-            VerificationError::Process => Self::Internal("Verifier process execution failed".into()),
+            VerificationError::Process => {
+                Self::Internal("Verifier process execution failed".into())
+            }
             VerificationError::Rejected => Self::VerificationRejected,
             VerificationError::InvalidVerifierOutput => Self::InvalidVerifierOutput,
             VerificationError::Identity(e) => Self::InvalidPackage(e.to_string()),
@@ -141,9 +142,13 @@ impl From<StorageError> for ApiError {
             StorageError::InvalidEvidenceId => Self::InvalidEvidenceId,
             StorageError::NotFound => Self::NotFound,
             StorageError::Conflict => Self::Conflict,
-            StorageError::Corrupt => Self::Internal("Evidence integrity corruption detected".into()),
+            StorageError::Corrupt => {
+                Self::Internal("Evidence integrity corruption detected".into())
+            }
             StorageError::UnsafePath => Self::Internal("Storage path safety violation".into()),
-            StorageError::UnsupportedSchemaVersion => Self::Internal("Unsupported database schema".into()),
+            StorageError::UnsupportedSchemaVersion => {
+                Self::Internal("Unsupported database schema".into())
+            }
             StorageError::Io(_) => Self::Internal("Storage I/O failure".into()),
             StorageError::Database(_) => Self::StorageUnavailable,
         }

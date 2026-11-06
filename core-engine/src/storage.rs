@@ -131,7 +131,6 @@ impl EvidenceStore {
             .map_err(StorageError::Database)
     }
 
-
     fn connect(&self) -> Result<Connection, StorageError> {
         reject_symlink_if_present(&self.database_path)?;
         let connection = Connection::open(&self.database_path)?;
@@ -365,8 +364,6 @@ impl EvidenceStore {
         transaction.commit()?;
         Ok(())
     }
-
-
 
     fn initialize_database(&self) -> Result<(), StorageError> {
         let mut connection = self.connect()?;
@@ -821,7 +818,7 @@ fn validate_verification_report(
         || report
             .trust_policy_id
             .as_deref()
-            .map_or(true, str::is_empty)
+            .is_none_or(str::is_empty)
         || (original
             && (report.verifier.version != payload.verification.verifier_version
                 || report.trust_policy_id.as_deref() != Some(payload.trust_policy_id.as_str())))

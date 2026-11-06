@@ -84,4 +84,3 @@ pub struct ReverificationResponse {
     pub status: &'static str,
     pub verification: EvidenceReport,
 }
-

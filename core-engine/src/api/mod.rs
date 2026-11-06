@@ -1,12 +1,19 @@
+mod error;
 mod handlers;
+mod models;
 
-use axum::{routing::{get, post}, Router};
+pub use error::ApiError;
+pub use models::*;
+
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::storage::EvidenceStore;
-
 
 /// Shared application state for the API.
 #[derive(Clone)]
@@ -30,11 +37,7 @@ impl AppState {
     }
 
     /// Construct an AppState with configurable concurrency and timeout.
-    pub fn with_options(
-        store: EvidenceStore,
-        max_concurrency: usize,
-        timeout: Duration,
-    ) -> Self {
+    pub fn with_options(store: EvidenceStore, max_concurrency: usize, timeout: Duration) -> Self {
         Self {
             store: Arc::new(store),
             verifier_semaphore: Arc::new(tokio::sync::Semaphore::new(max_concurrency)),
@@ -46,19 +49,24 @@ impl AppState {
 /// Create the Axum router with all API routes registered.
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
+        .route("/", get(frontend))
+        .route("/app", get(frontend))
         .route("/health", get(handlers::health))
         .route("/api/v1/evidence", post(handlers::submit_evidence))
-        .route("/api/v1/evidence/:evidence_id", get(handlers::get_evidence_metadata))
         .route(
-            "/api/v1/evidence/:evidence_id/artifacts/:artifact_type",
+            "/api/v1/evidence/{evidence_id}",
+            get(handlers::get_evidence_metadata),
+        )
+        .route(
+            "/api/v1/evidence/{evidence_id}/artifacts/{artifact_type}",
             get(handlers::get_artifact),
         )
         .route(
-            "/api/v1/evidence/:evidence_id/verifications",
+            "/api/v1/evidence/{evidence_id}/verifications",
             get(handlers::get_verification_history),
         )
         .route(
-            "/api/v1/evidence/:evidence_id/reverify",
+            "/api/v1/evidence/{evidence_id}/reverify",
             post(handlers::reverify_evidence),
         )
         .with_state(state)
@@ -95,4 +103,3 @@ pub async fn run_server(
         })
         .await
 }
-
