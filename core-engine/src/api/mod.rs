@@ -1,12 +1,12 @@
 mod handlers;
 
-use axum::{routing::get, Router};
+use axum::{routing::{get, post}, Router};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::storage::EvidenceStore;
-use crate::api::handlers;
+
 
 /// Shared application state for the API.
 #[derive(Clone)]
@@ -43,12 +43,24 @@ impl AppState {
     }
 }
 
-/// Create the Axum router.
-/// Currently only the health endpoint is exposed, plus the evidence routes defined in `handlers`.
+/// Create the Axum router with all API routes registered.
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(handlers::health))
-        // evidence endpoints are defined inside handlers module (imported in handlers.rs)
+        .route("/api/v1/evidence", post(handlers::submit_evidence))
+        .route("/api/v1/evidence/:evidence_id", get(handlers::get_evidence_metadata))
+        .route(
+            "/api/v1/evidence/:evidence_id/artifacts/:artifact_type",
+            get(handlers::get_artifact),
+        )
+        .route(
+            "/api/v1/evidence/:evidence_id/verifications",
+            get(handlers::get_verification_history),
+        )
+        .route(
+            "/api/v1/evidence/:evidence_id/reverify",
+            post(handlers::reverify_evidence),
+        )
         .with_state(state)
 }
 
@@ -57,12 +69,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 /// The function blocks until the server is shut down via the provided
 /// `shutdown_signal` future.
 pub async fn run_server(
-    bind_addr: Option<SocketAddr>,
+    bind_addr: impl Into<SocketAddr>,
     state: Arc<AppState>,
-    shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<(), std::io::Error> {
-    // Default to 127.0.0.1:3000 if not supplied.
-    let addr = bind_addr.unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], 3000)));
+    let addr: SocketAddr = bind_addr.into();
 
     // Enforce loopback unless caller explicitly opts‑in via `--allow-external` in CLI.
     if !addr.ip().is_loopback() {
@@ -78,6 +88,11 @@ pub async fn run_server(
     // Use TcpListener + axum::serve as recommended for Axum 0.8.
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal)
+        .with_graceful_shutdown(async {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("install CTRL+C handler");
+        })
         .await
 }
+

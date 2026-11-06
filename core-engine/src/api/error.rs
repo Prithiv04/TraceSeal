@@ -23,6 +23,8 @@ pub enum ApiError {
     ConcurrencyLimitReached,
     Internal(String),
     /// Storage subsystem is unavailable (e.g., DB cannot be opened).
+    StorageUnavailable,
+}
 
 
 #[derive(Serialize)]

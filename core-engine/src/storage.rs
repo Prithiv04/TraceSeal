@@ -131,6 +131,7 @@ impl EvidenceStore {
             .map_err(StorageError::Database)
     }
 
+
     fn connect(&self) -> Result<Connection, StorageError> {
         reject_symlink_if_present(&self.database_path)?;
         let connection = Connection::open(&self.database_path)?;
@@ -138,6 +139,7 @@ impl EvidenceStore {
         connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL;")?;
         Ok(connection)
     }
+
     pub fn open(root: impl AsRef<Path>) -> Result<Self, StorageError> {
         let configured_root = root.as_ref();
         match fs::symlink_metadata(configured_root) {
@@ -364,13 +366,7 @@ impl EvidenceStore {
         Ok(())
     }
 
-    fn connect(&self) -> Result<Connection, StorageError> {
-        reject_symlink_if_present(&self.database_path)?;
-        let connection = Connection::open(&self.database_path)?;
-        connection.busy_timeout(Duration::from_secs(10))?;
-        connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL;")?;
-        Ok(connection)
-    }
+
 
     fn initialize_database(&self) -> Result<(), StorageError> {
         let mut connection = self.connect()?;
