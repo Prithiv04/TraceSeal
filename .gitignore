@@ -147,3 +147,15 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Workspace-local toolchains and upstream checkout (version/pin documented at root)
+/.toolchains/
+/tlsnotary/
+**/target/
+/artifacts/
+
+# TLSNotary prover secrets and local credentials
+*.secrets.tlsn
+.env
+.env.*
+!.env.example

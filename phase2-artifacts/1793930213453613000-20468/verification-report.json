@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "verification_status": "VERIFIED",
+  "http_status": 503,
+  "disclosed_evidence": {
+    "error": "Service Unavailable",
+    "message": "The service is temporarily unavailable.",
+    "service": "TRACESEAL Demo API",
+    "status": 503
+  },
+  "attestation": {
+    "identifier": "1ceb8878590f9404111fea7d2e6310f9d78cf11e33a1e53bc73a5891e1fe1286",
+    "sha256": "1ceb8878590f9404111fea7d2e6310f9d78cf11e33a1e53bc73a5891e1fe1286"
+  },
+  "presentation": {
+    "identifier": "608fab65a7b4c41790fce705abd137fde47c299f69fa820067ac3422d7e2f9a3",
+    "sha256": "608fab65a7b4c41790fce705abd137fde47c299f69fa820067ac3422d7e2f9a3"
+  },
+  "verifier": {
+    "version": "traceseal-core 0.1.0; tlsn v0.1.0-alpha.15",
+    "exit_code": 0
+  },
+  "verified_at": "2026-11-06T01:57:09.859Z",
+  "errors": []
+}
