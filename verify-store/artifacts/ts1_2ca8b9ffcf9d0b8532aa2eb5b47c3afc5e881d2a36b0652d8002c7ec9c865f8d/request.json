@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-11-06T19:09:31.742Z",
+  "disclosures": [
+    "status",
+    "error",
+    "service",
+    "message"
+  ],
+  "method": "GET",
+  "schema_version": "1.0",
+  "url": "https://localhost:4443/trace-seal-503"
+}

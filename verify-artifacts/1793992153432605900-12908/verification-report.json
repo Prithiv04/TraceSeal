@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "verification_status": "VERIFIED",
+  "http_status": 503,
+  "disclosed_evidence": {
+    "error": "Service Unavailable",
+    "message": "The service is temporarily unavailable.",
+    "service": "TRACESEAL Demo API",
+    "status": 503
+  },
+  "attestation": {
+    "identifier": "7f867f9e8f1663f91c71588cf21ad2e5432f649a0dd2876e5ce10b57db0c724b",
+    "sha256": "7f867f9e8f1663f91c71588cf21ad2e5432f649a0dd2876e5ce10b57db0c724b"
+  },
+  "presentation": {
+    "identifier": "9ee1f2a734ada274ae77a88183ef425c8104c6dfa0aadc093b3afe08d88e04dc",
+    "sha256": "9ee1f2a734ada274ae77a88183ef425c8104c6dfa0aadc093b3afe08d88e04dc"
+  },
+  "verifier": {
+    "version": "traceseal-core 0.1.0; tlsn v0.1.0-alpha.15",
+    "exit_code": 0
+  },
+  "verified_at": "2026-11-06T19:09:31.775Z",
+  "errors": [],
+  "proof_format": "tlsnotary-presentation-bincode1-v0.1.0-alpha.15",
+  "tlsnotary_version": "0.1.0-alpha.15",
+  "trust_policy_id": "demo-local-v1",
+  "verified_request": {
+    "host": "localhost",
+    "method": "GET",
+    "path": "/trace-seal-503",
+    "scheme": "https"
+  }
+}
