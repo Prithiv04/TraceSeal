@@ -7,6 +7,7 @@ use std::{
 
 use tempfile::tempdir;
 use traceseal_core::{
+    engine::{verify_and_identify, EvidencePackage, VerificationError},
     prove, run_process_with_timeout, run_verifier, validate_endpoint, verify_files, EvidenceReport,
 };
 
@@ -114,6 +115,10 @@ fn report_round_trips_as_json() {
             .unwrap(),
         verified_at: "2026-01-01T00:00:00Z".into(),
         errors: vec!["invalid input".into()],
+        proof_format: None,
+        tlsnotary_version: None,
+        trust_policy_id: None,
+        verified_request: None,
     };
     let encoded = serde_json::to_vec(&report).unwrap();
     let decoded: EvidenceReport = serde_json::from_slice(&encoded).unwrap();
@@ -204,6 +209,16 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
     let report: EvidenceReport = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(report.verification_status, "VERIFIED");
     assert_eq!(report.http_status, Some(503));
+    assert_eq!(report.trust_policy_id.as_deref(), Some("demo-local-v1"));
+    assert_eq!(
+        report.proof_format.as_deref(),
+        Some("tlsnotary-presentation-bincode1-v0.1.0-alpha.15")
+    );
+    let verified_request = report.verified_request.as_ref().unwrap();
+    assert_eq!(verified_request.scheme, "https");
+    assert_eq!(verified_request.host, "localhost");
+    assert_eq!(verified_request.method, "GET");
+    assert_eq!(verified_request.path, "/trace-seal-503");
     let package = package_path(&result);
     assert_eq!(
         report.disclosed_evidence.get("status").unwrap(),
@@ -227,6 +242,67 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
 
     let valid_att = package.join("attestation.tlsn");
     let valid_pres = package.join("presentation.tlsn");
+    let attestation_bytes = fs::read(&valid_att).unwrap();
+    let presentation_bytes = fs::read(&valid_pres).unwrap();
+    let manifest_bytes = fs::read(package.join("request.json")).unwrap();
+    let verified_identity = verify_and_identify(
+        EvidencePackage {
+            attestation: &attestation_bytes,
+            presentation: &presentation_bytes,
+            request_manifest: &manifest_bytes,
+        },
+        Duration::from_secs(30),
+    )
+    .await
+    .expect("actual verifier should authorize evidence identity");
+    let repeated_identity = verify_and_identify(
+        EvidencePackage {
+            attestation: &attestation_bytes,
+            presentation: &presentation_bytes,
+            request_manifest: &manifest_bytes,
+        },
+        Duration::from_secs(30),
+    )
+    .await
+    .expect("identical verified package should have reproducible identity");
+    assert_eq!(verified_identity, repeated_identity);
+    assert_eq!(verified_identity.payload().verification.result, "VERIFIED");
+    assert_eq!(
+        verified_identity.payload().verified_request.path,
+        "/trace-seal-503"
+    );
+    assert_eq!(verified_identity.payload().disclosed_http_status, 503);
+    assert_eq!(verified_identity.payload().trust_policy_id, "demo-local-v1");
+
+    let timeout_result = verify_and_identify(
+        EvidencePackage {
+            attestation: &attestation_bytes,
+            presentation: &presentation_bytes,
+            request_manifest: &manifest_bytes,
+        },
+        Duration::from_millis(1),
+    )
+    .await;
+    assert!(matches!(timeout_result, Err(VerificationError::Timeout)));
+
+    let modified_manifest = String::from_utf8(manifest_bytes.clone())
+        .unwrap()
+        .replace("trace-seal-503", "trace-seal-200")
+        .into_bytes();
+    let manifest_mismatch = verify_and_identify(
+        EvidencePackage {
+            attestation: &attestation_bytes,
+            presentation: &presentation_bytes,
+            request_manifest: &modified_manifest,
+        },
+        Duration::from_secs(30),
+    )
+    .await;
+    assert!(matches!(
+        manifest_mismatch,
+        Err(VerificationError::Rejected)
+    ));
+
     let verify = |att: &std::path::Path, pres: &std::path::Path| {
         Command::new(exe)
             .args([
@@ -245,6 +321,20 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
     changed[changed_at] ^= 0x20;
     let tampered = temp.path().join("tampered.presentation.tlsn");
     fs::write(&tampered, changed).unwrap();
+    let tampered_presentation = fs::read(&tampered).unwrap();
+    let tampered_identity = verify_and_identify(
+        EvidencePackage {
+            attestation: &attestation_bytes,
+            presentation: &tampered_presentation,
+            request_manifest: &manifest_bytes,
+        },
+        Duration::from_secs(30),
+    )
+    .await;
+    assert!(matches!(
+        tampered_identity,
+        Err(VerificationError::Rejected)
+    ));
     let rejected = verify(&valid_att, &tampered);
     assert!(!rejected.status.success());
     let rejection: EvidenceReport = serde_json::from_slice(&rejected.stdout).unwrap();
@@ -255,8 +345,27 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
     invalid_att[invalid_at] ^= 0x40;
     let invalid_att_path = temp.path().join("invalid.attestation.tlsn");
     fs::write(&invalid_att_path, invalid_att).unwrap();
+    let invalid_att_bytes = fs::read(&invalid_att_path).unwrap();
+    let invalid_att_identity = verify_and_identify(
+        EvidencePackage {
+            attestation: &invalid_att_bytes,
+            presentation: &presentation_bytes,
+            request_manifest: &manifest_bytes,
+        },
+        Duration::from_secs(30),
+    )
+    .await;
+    assert!(matches!(
+        invalid_att_identity,
+        Err(VerificationError::Rejected)
+    ));
     let rejected = verify(&invalid_att_path, &valid_pres);
     assert!(!rejected.status.success());
+    assert!(
+        !rejected.stdout.is_empty(),
+        "verifier emitted no report: {}",
+        String::from_utf8_lossy(&rejected.stderr)
+    );
     assert_eq!(
         serde_json::from_slice::<EvidenceReport>(&rejected.stdout)
             .unwrap()
@@ -310,6 +419,25 @@ async fn genuine_503_proof_verifies_and_tampering_is_rejected() {
     assert_eq!(
         report_200.disclosed_evidence.get("status"),
         Some(&serde_json::json!(200))
+    );
+    let package_200 = package_path(&result_200);
+    let attestation_200 = fs::read(package_200.join("attestation.tlsn")).unwrap();
+    let presentation_200 = fs::read(package_200.join("presentation.tlsn")).unwrap();
+    let manifest_200 = fs::read(package_200.join("request.json")).unwrap();
+    let identity_200 = verify_and_identify(
+        EvidencePackage {
+            attestation: &attestation_200,
+            presentation: &presentation_200,
+            request_manifest: &manifest_200,
+        },
+        Duration::from_secs(30),
+    )
+    .await
+    .expect("second independently verified proof should receive an identity");
+    assert_ne!(verified_identity.evidence_id(), identity_200.evidence_id());
+    assert_ne!(
+        verified_identity.payload().proof.presentation_sha256,
+        identity_200.payload().proof.presentation_sha256
     );
 
     let result_404 = run_prove(

@@ -1,3 +1,5 @@
+pub mod engine;
+pub mod evidence;
 pub mod fixture;
 
 use std::{
@@ -8,6 +10,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::evidence::{VerifiedRequest, PROOF_FORMAT, TLSNOTARY_VERSION, TRUST_POLICY_ID};
 use chrono::{SecondsFormat, Utc};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use http_body_util::{BodyExt, Empty};
@@ -44,6 +47,7 @@ const TRUSTED_DEMO_KEY: &str = "031b84c5567b126440995d3ed5aaba0565d71e1834604819
 const ALLOWED_FIELDS: &[&str] = &["status", "error", "service", "message"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EvidenceReport {
     pub schema_version: String,
     pub verification_status: String,
@@ -54,14 +58,24 @@ pub struct EvidenceReport {
     pub verifier: VerifierInfo,
     pub verified_at: String,
     pub errors: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_format: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tlsnotary_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trust_policy_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verified_request: Option<VerifiedRequest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ArtifactInfo {
     pub identifier: Option<String>,
     pub sha256: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct VerifierInfo {
     pub version: String,
     pub exit_code: Option<i32>,
@@ -591,6 +605,10 @@ pub fn verify_files(attestation_path: &Path, presentation_path: &Path) -> Eviden
         },
         verified_at: now(),
         errors: vec![],
+        proof_format: None,
+        tlsnotary_version: None,
+        trust_policy_id: None,
+        verified_request: None,
     };
     let (Ok(att_bytes), Ok(pres_bytes)) = (att_bytes, pres_bytes) else {
         report
@@ -695,6 +713,12 @@ pub fn verify_files(attestation_path: &Path, presentation_path: &Path) -> Eviden
     let sent = String::from_utf8_lossy(transcript.sent_unsafe());
     let request_line = sent.lines().next().unwrap_or_default();
     let request_parts = request_line.split_whitespace().collect::<Vec<_>>();
+    let host_headers = sent
+        .lines()
+        .filter_map(|line| line.split_once(':'))
+        .filter(|(name, _)| name.eq_ignore_ascii_case("host"))
+        .map(|(_, value)| value.trim())
+        .collect::<Vec<_>>();
     if request_parts.len() != 3
         || request_parts[0] != "GET"
         || ![
@@ -705,9 +729,7 @@ pub fn verify_files(attestation_path: &Path, presentation_path: &Path) -> Eviden
         ]
         .contains(&request_parts[1])
         || request_parts[2] != "HTTP/1.1"
-        || !sent
-            .lines()
-            .any(|line| line.eq_ignore_ascii_case("Host: localhost"))
+        || host_headers.as_slice() != ["localhost"]
     {
         report.verification_status = "REJECTED".into();
         report
@@ -715,6 +737,12 @@ pub fn verify_files(attestation_path: &Path, presentation_path: &Path) -> Eviden
             .push("presentation does not disclose the expected GET request to localhost".into());
         return report;
     }
+    let verified_request = VerifiedRequest {
+        scheme: "https".into(),
+        host: SERVER_DOMAIN.into(),
+        method: request_parts[0].into(),
+        path: request_parts[1].into(),
+    };
     let recv = transcript.received_unsafe();
     let Some(split) = recv.windows(4).position(|w| w == b"\r\n\r\n") else {
         report.verification_status = "REJECTED".into();
@@ -761,6 +789,10 @@ pub fn verify_files(attestation_path: &Path, presentation_path: &Path) -> Eviden
             .push("HTTP status code was not disclosed".into());
     } else {
         report.verification_status = "VERIFIED".into();
+        report.proof_format = Some(PROOF_FORMAT.into());
+        report.tlsnotary_version = Some(TLSNOTARY_VERSION.into());
+        report.trust_policy_id = Some(TRUST_POLICY_ID.into());
+        report.verified_request = Some(verified_request);
     }
     report
 }
