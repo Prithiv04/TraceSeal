@@ -3,210 +3,577 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TRACESEAL — Evidence Console</title>
+<title>TRACESEAL — Evidence Verification</title>
 <style>
   :root {
-    --bg: #0b0f14;
-    --panel: #12181f;
-    --panel-2: #0e141b;
-    --border: #233040;
+    --bg: #0d1117;
+    --bg-2: #11161d;
+    --panel: #151b24;
+    --panel-2: #0f141b;
+    --border: #26303d;
+    --border-soft: #1e2732;
     --text: #e6edf3;
     --muted: #8b98a5;
-    --accent: #4cc2ff;
+    --faint: #5c6b7a;
+    --accent: #58a6ff;
+    --accent-dim: rgba(88,166,255,0.12);
     --ok: #3fb950;
+    --ok-dim: rgba(63,185,80,0.12);
     --warn: #d29922;
+    --warn-dim: rgba(210,153,34,0.12);
     --err: #f85149;
+    --err-dim: rgba(248,81,73,0.12);
     --mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    --radius: 10px;
+    --sidebar-w: 232px;
+    --topbar-h: 56px;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.5;
+    font-size: 14px;
+    line-height: 1.55;
   }
-  header {
-    border-bottom: 1px solid var(--border);
-    padding: 1rem 1.5rem;
+  button { font-family: inherit; }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  .app { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: var(--sidebar-w);
+    flex-shrink: 0;
+    background: var(--bg-2);
+    border-right: 1px solid var(--border);
     display: flex;
-    align-items: baseline;
-    gap: 1rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    transition: transform 0.2s ease;
   }
-  header h1 { font-size: 1.25rem; margin: 0; letter-spacing: 0.04em; }
-  header .sub { color: var(--muted); font-size: 0.85rem; }
-  .health {
-    margin-left: auto;
-    font-size: 0.8rem;
-    padding: 0.25rem 0.6rem;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    color: var(--muted);
+  .brand {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0 1rem; height: var(--topbar-h);
+    border-bottom: 1px solid var(--border-soft);
   }
-  .health.ok { color: var(--ok); border-color: var(--ok); }
-  .health.err { color: var(--err); border-color: var(--err); }
-  main {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 1.5rem;
-    display: grid;
-    gap: 1.25rem;
+  .brand .mark {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--accent-dim); border: 1px solid var(--accent);
+    display: grid; place-items: center;
+    color: var(--accent); font-weight: 800; font-size: 13px;
+    font-family: var(--mono);
   }
-  section {
+  .brand .name { font-weight: 700; letter-spacing: 0.08em; font-size: 0.95rem; }
+  .brand .name span { color: var(--faint); font-weight: 500; }
+  nav { padding: 0.75rem 0.6rem; display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  nav a {
+    display: flex; align-items: center; gap: 0.65rem;
+    padding: 0.5rem 0.7rem; border-radius: 7px;
+    color: var(--muted); text-decoration: none; font-size: 0.88rem;
+    border: 1px solid transparent;
+    transition: background 0.12s, color 0.12s;
+  }
+  nav a svg { width: 16px; height: 16px; flex-shrink: 0; }
+  nav a:hover { background: var(--panel); color: var(--text); }
+  nav a.active { background: var(--accent-dim); color: var(--accent); border-color: rgba(88,166,255,0.25); }
+  .sidebar-foot { padding: 0.8rem 1rem; border-top: 1px solid var(--border-soft); font-size: 0.72rem; color: var(--faint); }
+
+  .main { flex: 1; margin-left: var(--sidebar-w); display: flex; flex-direction: column; min-width: 0; }
+  .topbar {
+    height: var(--topbar-h);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-2);
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0 1.5rem;
+    position: sticky; top: 0; z-index: 30;
+  }
+  .topbar .page-title { font-weight: 600; font-size: 0.95rem; }
+  .topbar .spacer { flex: 1; }
+  .health-pill {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    font-size: 0.78rem; padding: 0.28rem 0.7rem; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted);
+    background: var(--panel);
+  }
+  .health-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .health-pill.ok { color: var(--ok); border-color: rgba(63,185,80,0.4); }
+  .health-pill.ok .dot { background: var(--ok); }
+  .health-pill.err { color: var(--err); border-color: rgba(248,81,73,0.4); }
+  .health-pill.err .dot { background: var(--err); }
+  .health-pill.checking .dot { background: var(--warn); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  .menu-btn {
+    display: none; background: none; border: 1px solid var(--border);
+    color: var(--text); border-radius: 7px; padding: 0.35rem 0.55rem; cursor: pointer;
+  }
+  .scrim {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 35;
+  }
+  .scrim.show { display: block; }
+
+  .content { padding: 1.75rem 1.5rem 3rem; max-width: 1080px; width: 100%; margin: 0 auto; }
+  .page { display: none; }
+  .page.active { display: block; animation: fadein 0.18s ease; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  h1.page-h { font-size: 1.4rem; margin: 0 0 0.25rem; }
+  .page-sub { color: var(--muted); margin: 0 0 1.5rem; font-size: 0.9rem; }
+
+  .card {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 1.25rem;
+    border-radius: var(--radius);
+    padding: 1.25rem 1.35rem;
+    margin-bottom: 1.1rem;
   }
-  section h2 { margin: 0 0 0.75rem; font-size: 1rem; }
-  section h2 .hint { color: var(--muted); font-weight: normal; font-size: 0.8rem; }
-  label { display: block; font-size: 0.8rem; color: var(--muted); margin: 0.75rem 0 0.25rem; }
-  input[type="text"], input[type="file"] {
-    width: 100%;
+  .card h2 { margin: 0 0 0.9rem; font-size: 0.95rem; font-weight: 600; }
+  .card h3 { margin: 1.1rem 0 0.5rem; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); font-weight: 600; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.1rem; }
+  @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
+    background: var(--accent); color: #06121f; border: none; border-radius: 8px;
+    padding: 0.55rem 1.1rem; font-weight: 600; font-size: 0.88rem;
+    cursor: pointer; text-decoration: none;
+    transition: filter 0.12s, opacity 0.12s;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+  .btn.secondary { background: transparent; color: var(--accent); border: 1px solid rgba(88,166,255,0.4); }
+  .btn.secondary:hover { background: var(--accent-dim); filter: none; }
+  .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn.ghost:hover { color: var(--text); border-color: var(--faint); background: var(--panel-2); filter: none; }
+  .btn.sm { padding: 0.3rem 0.65rem; font-size: 0.78rem; border-radius: 6px; }
+  .btn-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.12rem 0.55rem; border-radius: 999px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.03em;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .badge.VERIFIED { background: var(--ok-dim); color: var(--ok); border-color: rgba(63,185,80,0.4); }
+  .badge.REJECTED, .badge.ERROR, .badge.FAILED { background: var(--err-dim); color: var(--err); border-color: rgba(248,81,73,0.4); }
+  .badge.stored, .badge.reverified, .badge.original { background: var(--accent-dim); color: var(--accent); border-color: rgba(88,166,255,0.35); }
+  .badge.already_present { background: var(--warn-dim); color: var(--warn); border-color: rgba(210,153,34,0.4); }
+  .badge.neutral { background: var(--panel-2); color: var(--muted); border-color: var(--border); }
+
+  .kv { display: grid; grid-template-columns: 10.5rem 1fr; gap: 0.35rem 1rem; font-size: 0.85rem; margin: 0.5rem 0; }
+  .kv dt { color: var(--faint); }
+  .kv dd { margin: 0; font-family: var(--mono); font-size: 0.8rem; word-break: break-all; }
+  @media (max-width: 640px) { .kv { grid-template-columns: 1fr; gap: 0.1rem; } .kv dd { margin-bottom: 0.4rem; } }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  th { color: var(--faint); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  tr:last-child td { border-bottom: none; }
+  .table-wrap { overflow-x: auto; }
+
+  .empty {
+    text-align: center; color: var(--muted); padding: 2.2rem 1rem;
+    border: 1px dashed var(--border); border-radius: var(--radius);
     background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    padding: 0.5rem 0.6rem;
-    font-size: 0.9rem;
   }
-  input[type="file"] { padding: 0.4rem; }
-  button {
-    margin-top: 1rem;
-    background: var(--accent);
-    color: #06222f;
-    border: none;
-    border-radius: 6px;
-    padding: 0.55rem 1.1rem;
-    font-weight: 600;
-    font-size: 0.9rem;
-    cursor: pointer;
+  .empty .icon { font-size: 1.6rem; margin-bottom: 0.4rem; opacity: 0.6; }
+  .empty p { margin: 0.2rem 0; font-size: 0.88rem; }
+  .empty .hint { color: var(--faint); font-size: 0.8rem; }
+
+  .skeleton { border-radius: 6px; background: linear-gradient(90deg, var(--panel-2) 25%, var(--border-soft) 50%, var(--panel-2) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; height: 0.9rem; margin: 0.5rem 0; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  .dropzone {
+    border: 1.5px dashed var(--border); border-radius: var(--radius);
+    padding: 1.4rem 1rem; text-align: center; cursor: pointer;
+    background: var(--panel-2); transition: border-color 0.15s, background 0.15s;
+    position: relative; min-height: 130px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
   }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-  .status-line { margin-top: 0.75rem; font-size: 0.85rem; min-height: 1.2em; }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-dim); }
+  .dropzone .dz-icon { font-size: 1.5rem; opacity: 0.7; }
+  .dropzone .dz-name { font-family: var(--mono); font-size: 0.82rem; color: var(--accent); margin-top: 0.4rem; word-break: break-all; }
+  .dropzone .dz-meta { font-size: 0.75rem; color: var(--faint); margin-top: 0.15rem; }
+  .dropzone .dz-actions { margin-top: 0.55rem; display: flex; gap: 0.4rem; justify-content: center; }
+  .dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  .field { margin-bottom: 1rem; }
+  .field label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; font-weight: 600; }
+  .field .help { font-size: 0.75rem; color: var(--faint); margin-top: 0.3rem; }
+  input[type=text], input[type=search] {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); padding: 0.55rem 0.7rem;
+    font-size: 0.88rem; font-family: var(--mono);
+  }
+  input[type=text]:focus, input[type=search]:focus { border-color: var(--accent); outline: none; }
+  input.invalid { border-color: var(--err); }
+
+  .alert {
+    border-radius: 8px; padding: 0.8rem 1rem; font-size: 0.86rem;
+    border: 1px solid; margin-top: 1rem;
+  }
+  .alert.ok { background: var(--ok-dim); border-color: rgba(63,185,80,0.4); color: var(--ok); }
+  .alert.err { background: var(--err-dim); border-color: rgba(248,81,73,0.4); color: var(--err); }
+  .alert.info { background: var(--accent-dim); border-color: rgba(88,166,255,0.35); color: var(--accent); }
+  .alert .alert-title { font-weight: 700; margin-bottom: 0.2rem; }
+  .alert code { font-family: var(--mono); font-size: 0.8em; background: rgba(0,0,0,0.25); padding: 0.05rem 0.3rem; border-radius: 4px; }
+
+  .status-line { margin-top: 0.9rem; font-size: 0.85rem; min-height: 1.3em; }
   .status-line.ok { color: var(--ok); }
   .status-line.err { color: var(--err); }
   .status-line.info { color: var(--muted); }
-  .kv { display: grid; grid-template-columns: 11rem 1fr; gap: 0.3rem 1rem; font-size: 0.85rem; margin-top: 0.75rem; }
-  .kv dt { color: var(--muted); }
-  .kv dd { margin: 0; font-family: var(--mono); word-break: break-all; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.75rem; }
-  th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  .badge {
-    display: inline-block;
-    padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 600;
+
+  .steps { display: flex; flex-direction: column; }
+  .step { display: flex; gap: 0.9rem; padding: 0.7rem 0; border-bottom: 1px solid var(--border-soft); }
+  .step:last-child { border-bottom: none; }
+  .step .num {
+    width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+    background: var(--accent-dim); border: 1px solid rgba(88,166,255,0.4);
+    color: var(--accent); font-size: 0.78rem; font-weight: 700;
+    display: grid; place-items: center; font-family: var(--mono);
   }
-  .badge.VERIFIED { background: rgba(63,185,80,0.15); color: var(--ok); border: 1px solid var(--ok); }
-  .badge.REJECTED, .badge.ERROR { background: rgba(248,81,73,0.15); color: var(--err); border: 1px solid var(--err); }
-  .badge.stored, .badge.reverified { background: rgba(76,194,255,0.12); color: var(--accent); border: 1px solid var(--accent); }
-  .badge.already_present { background: rgba(210,153,34,0.12); color: var(--warn); border: 1px solid var(--warn); }
-  .empty { color: var(--muted); font-size: 0.85rem; padding: 0.75rem 0; }
-  .artifacts { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
-  .artifacts a {
-    font-size: 0.8rem;
-    color: var(--accent);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.3rem 0.6rem;
-    text-decoration: none;
+  .step .step-title { font-weight: 600; font-size: 0.9rem; }
+  .step .step-desc { color: var(--muted); font-size: 0.82rem; }
+
+  .artifact-list { display: flex; flex-direction: column; gap: 0.55rem; }
+  .artifact-item {
+    display: flex; align-items: center; gap: 0.8rem;
+    border: 1px solid var(--border-soft); border-radius: 8px;
+    padding: 0.6rem 0.8rem; background: var(--panel-2);
   }
-  .artifacts a:hover { border-color: var(--accent); }
-  pre {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.75rem;
-    font-family: var(--mono);
-    font-size: 0.78rem;
-    overflow-x: auto;
-    max-height: 22rem;
-    overflow-y: auto;
+  .artifact-item .a-name { font-family: var(--mono); font-size: 0.82rem; font-weight: 600; }
+  .artifact-item .a-hint { font-size: 0.75rem; color: var(--faint); }
+  .artifact-item .spacer { flex: 1; }
+  .artifact-item a.dl {
+    font-size: 0.78rem; color: var(--accent); text-decoration: none;
+    border: 1px solid rgba(88,166,255,0.35); border-radius: 6px;
+    padding: 0.28rem 0.6rem; white-space: nowrap;
   }
-  .hidden { display: none; }
-  .row { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
-  .row > div { flex: 1; min-width: 16rem; }
-  @media (max-width: 640px) {
-    .kv { grid-template-columns: 1fr; }
-    header h1 { font-size: 1.05rem; }
+  .artifact-item a.dl:hover { background: var(--accent-dim); }
+
+  .toast-wrap { position: fixed; bottom: 1.2rem; right: 1.2rem; z-index: 100; display: flex; flex-direction: column; gap: 0.5rem; }
+  .toast {
+    background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px;
+    padding: 0.7rem 1rem; font-size: 0.85rem; max-width: 340px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.45);
+    animation: slidein 0.2s ease;
+  }
+  .toast.ok { border-left-color: var(--ok); }
+  .toast.err { border-left-color: var(--err); }
+  @keyframes slidein { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+
+  .tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1.1rem; flex-wrap: wrap; }
+  .tabs button {
+    background: none; border: none; color: var(--muted); padding: 0.55rem 0.9rem;
+    font-size: 0.85rem; cursor: pointer; border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tabs button:hover { color: var(--text); }
+  .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+  .mono-id { font-family: var(--mono); font-size: 0.78rem; word-break: break-all; }
+  .copy-btn {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 5px; padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer;
+    margin-left: 0.4rem; vertical-align: middle;
+  }
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  .stat-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .stat {
+    flex: 1; min-width: 140px; background: var(--panel-2);
+    border: 1px solid var(--border-soft); border-radius: 8px; padding: 0.8rem 1rem;
+  }
+  .stat .s-label { font-size: 0.72rem; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat .s-value { font-size: 1.15rem; font-weight: 700; font-family: var(--mono); margin-top: 0.2rem; word-break: break-all; }
+
+  @media (max-width: 860px) {
+    .sidebar { transform: translateX(-100%); }
+    .sidebar.open { transform: none; box-shadow: 0 0 40px rgba(0,0,0,0.6); }
+    .main { margin-left: 0; }
+    .menu-btn { display: inline-block; }
+    .content { padding: 1.25rem 1rem 2.5rem; }
   }
 </style>
 </head>
 <body>
-<header>
-  <h1>TRACESEAL</h1>
-  <span class="sub">Evidence Console — TLSNotary proof verification &amp; storage</span>
-  <span id="health" class="health">checking…</span>
-</header>
-<main>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="mark">TS</div>
+      <div class="name">TRACE<span>SEAL</span></div>
+    </div>
+    <nav id="nav">
+      <a href="#/overview" data-page="overview">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/><rect x="9" y="9" width="5.5" height="5.5" rx="1"/></svg>
+        Overview
+      </a>
+      <a href="#/submit" data-page="submit">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10.5V2.5M4.5 6 8 2.5 11.5 6"/><path d="M2.5 10.5v2a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+        Submit Evidence
+      </a>
+      <a href="#/explorer" data-page="explorer">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+        Evidence Explorer
+      </a>
+      <a href="#/history" data-page="history">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5a6.5 6.5 0 1 0 6.5 6.5"/><path d="M8 4.5V8l2.5 1.5"/><path d="M13.5 1.5v3h-3"/></svg>
+        Verification History
+      </a>
+      <a href="#/about" data-page="about">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.5v3.5M8 5v.5"/></svg>
+        Documentation
+      </a>
+    </nav>
+    <div class="sidebar-foot">Evidence Schema 1.0<br>TLSNotary alpha.15</div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
 
-  <section>
-    <h2>Submit evidence package <span class="hint">multipart: attestation, presentation, request manifest</span></h2>
-    <div class="row">
-      <div><label for="attestation">attestation.tlsn</label><input type="file" id="attestation"></div>
-      <div><label for="presentation">presentation.tlsn</label><input type="file" id="presentation"></div>
-      <div><label for="manifest">request.json</label><input type="file" id="manifest"></div>
-    </div>
-    <button id="submitBtn">Verify &amp; store evidence</button>
-    <div id="submitStatus" class="status-line info"></div>
-    <div id="submitResult" class="hidden">
-      <dl class="kv">
-        <dt>evidence_id</dt><dd id="rEvidenceId"></dd>
-        <dt>commitment</dt><dd id="rCommitment"></dd>
-        <dt>disposition</dt><dd id="rDisposition"></dd>
-        <dt>stored_at</dt><dd id="rStoredAt"></dd>
-      </dl>
-    </div>
-  </section>
+  <div class="main">
+    <header class="topbar">
+      <button class="menu-btn" id="menuBtn" aria-label="Open navigation">☰</button>
+      <div class="page-title" id="pageTitle">Overview</div>
+      <div class="spacer"></div>
+      <span class="health-pill checking" id="healthPill"><span class="dot"></span><span id="healthText">checking…</span></span>
+    </header>
 
-  <section>
-    <h2>Look up evidence <span class="hint">ts1_ + 64 hex chars</span></h2>
-    <div class="row">
-      <div><label for="lookupId">evidence ID</label><input type="text" id="lookupId" placeholder="ts1_…" spellcheck="false"></div>
-      <div style="flex:0"><button id="lookupBtn">Load</button></div>
-    </div>
-    <div id="lookupStatus" class="status-line info"></div>
-    <div id="lookupResult" class="hidden">
-      <dl class="kv">
-        <dt>evidence_id</dt><dd id="mEvidenceId"></dd>
-        <dt>commitment</dt><dd id="mCommitment"></dd>
-        <dt>stored_at</dt><dd id="mStoredAt"></dd>
-        <dt>verification</dt><dd id="mVerification"></dd>
-        <dt>HTTP status</dt><dd id="mHttpStatus"></dd>
-        <dt>request</dt><dd id="mRequest"></dd>
-        <dt>reverifications</dt><dd id="mReverifyCount"></dd>
-      </dl>
-      <h2 style="margin-top:1.25rem">Disclosed fields</h2>
-      <table id="disclosedTable"><thead><tr><th>field</th><th>value</th></tr></thead><tbody></tbody></table>
-      <div class="empty hidden" id="disclosedEmpty">No disclosed fields recorded.</div>
-      <h2 style="margin-top:1.25rem">Artifacts</h2>
-      <div class="artifacts" id="artifactLinks"></div>
-      <h2 style="margin-top:1.25rem">Verification history</h2>
-      <table id="historyTable"><thead><tr><th>kind</th><th>status</th><th>verified_at</th><th>verifier</th></tr></thead><tbody></tbody></table>
-      <div class="empty hidden" id="historyEmpty">No verification records.</div>
-      <button id="reverifyBtn" class="secondary">Re-verify proof</button>
-      <div id="reverifyStatus" class="status-line info"></div>
-    </div>
-  </section>
+    <main class="content">
 
-</main>
+      <section class="page" id="page-overview">
+        <h1 class="page-h">Evidence verification console</h1>
+        <p class="page-sub">Submit TLSNotary proof packages, store verified evidence, and re-verify it later — all backed by real cryptographic verification.</p>
+
+        <div class="card">
+          <h2>How it works</h2>
+          <div class="steps">
+            <div class="step"><div class="num">1</div><div><div class="step-title">Submit an evidence package</div><div class="step-desc">Upload <code>attestation.tlsn</code>, <code>presentation.tlsn</code>, and <code>request.json</code> produced by <code>traceseal-core prove</code>.</div></div></div>
+            <div class="step"><div class="num">2</div><div><div class="step-title">Cryptographic verification</div><div class="step-desc">The backend runs the pinned TLSNotary verifier in a separate process. Only a <span class="badge VERIFIED">VERIFIED</span> result is stored.</div></div></div>
+            <div class="step"><div class="num">3</div><div><div class="step-title">Evidence is stored</div><div class="step-desc">A canonical record (commitment + <code>ts1_</code> ID) is persisted in SQLite with the exact artifact bytes.</div></div></div>
+            <div class="step"><div class="num">4</div><div><div class="step-title">Retrieve &amp; re-verify</div><div class="step-desc">Look up any evidence ID, download artifacts, and trigger a fresh verifier run at any time.</div></div></div>
+          </div>
+          <div class="btn-row">
+            <a class="btn" href="#/submit">Submit evidence</a>
+            <a class="btn secondary" href="#/explorer">Explore evidence</a>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h2>Backend status</h2>
+            <div id="overviewHealth"><div class="skeleton"></div><div class="skeleton" style="width:70%"></div></div>
+          </div>
+          <div class="card">
+            <h2>Recent evidence</h2>
+            <div id="recentEvidence"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-submit">
+        <h1 class="page-h">Submit evidence</h1>
+        <p class="page-sub">Upload a genuine TLSNotary package. Verification runs server-side before anything is stored.</p>
+
+        <div class="card">
+          <h2>Evidence package</h2>
+          <div class="grid-3" style="gap:0.9rem">
+            <div class="field">
+              <label>Attestation</label>
+              <div class="dropzone" data-kind="attestation">
+                <div class="dz-icon">📎</div>
+                <div class="dz-hint" style="font-size:0.8rem;color:var(--muted)">Drop <code>attestation.tlsn</code> or click to browse</div>
+                <input type="file" id="file-attestation" accept=".tlsn">
+              </div>
+            </div>
+            <div class="field">
+              <label>Presentation</label>
+              <div class="dropzone" data-kind="presentation">
+                <div class="dz-icon">📎</div>
+                <div class="dz-hint" style="font-size:0.8rem;color:var(--muted)">Drop <code>presentation.tlsn</code> or click to browse</div>
+                <input type="file" id="file-presentation" accept=".tlsn">
+              </div>
+            </div>
+            <div class="field">
+              <label>Request manifest</label>
+              <div class="dropzone" data-kind="request_manifest">
+                <div class="dz-icon">📄</div>
+                <div class="dz-hint" style="font-size:0.8rem;color:var(--muted)">Drop <code>request.json</code> or click to browse</div>
+                <input type="file" id="file-request_manifest" accept=".json,application/json">
+              </div>
+            </div>
+          </div>
+          <div class="help" style="font-size:0.78rem;color:var(--faint);margin-top:0.4rem">Multipart fields: <code>attestation</code>, <code>presentation</code>, <code>request_manifest</code>. Max sizes: 16 MB / 16 MB / 64 KB.</div>
+
+          <div id="submitSummary" class="hidden" style="margin-top:1rem">
+            <h3>Submission summary</h3>
+            <div class="table-wrap"><table><thead><tr><th>Field</th><th>File</th><th>Size</th><th></th></tr></thead><tbody id="submitSummaryBody"></tbody></table></div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn" id="submitBtn" disabled>Verify &amp; Store Evidence</button>
+            <button class="btn ghost" id="clearFilesBtn">Clear files</button>
+          </div>
+          <div id="submitStatus" class="status-line info" role="status" aria-live="polite"></div>
+        </div>
+
+        <div id="submitResult"></div>
+      </section>
+
+      <section class="page" id="page-explorer">
+        <h1 class="page-h">Evidence explorer</h1>
+        <p class="page-sub">Look up stored evidence by its <code>ts1_</code> identifier.</p>
+
+        <div class="card">
+          <div class="field">
+            <label for="lookupId">Evidence ID</label>
+            <input type="text" id="lookupId" placeholder="ts1_ followed by 64 hex characters" spellcheck="false" autocomplete="off">
+            <div class="help">Format: <code>ts1_</code> + 64 lowercase hex chars (68 total).</div>
+          </div>
+          <div class="btn-row" style="margin-top:0.4rem">
+            <button class="btn" id="lookupBtn">Load evidence</button>
+          </div>
+          <div id="lookupStatus" class="status-line info" role="status" aria-live="polite"></div>
+        </div>
+
+        <div id="evidenceDetail"></div>
+      </section>
+
+      <section class="page" id="page-history">
+        <h1 class="page-h">Verification history</h1>
+        <p class="page-sub">Verification records are stored per evidence record. Select an evidence ID to view its full history — the backend does not expose a global list.</p>
+
+        <div class="card">
+          <div class="field">
+            <label for="historyId">Evidence ID</label>
+            <input type="text" id="historyId" placeholder="ts1_…" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="btn-row" style="margin-top:0.4rem">
+            <button class="btn" id="historyBtn">Load history</button>
+          </div>
+          <div id="historyStatus" class="status-line info" role="status" aria-live="polite"></div>
+        </div>
+
+        <div id="historyResult"></div>
+
+        <div class="card" style="margin-top:1.1rem">
+          <h2>Remembered in this browser</h2>
+          <div class="help" style="font-size:0.8rem;color:var(--faint);margin-bottom:0.7rem">Evidence IDs you submitted or looked up are kept in local storage for quick access. This list is local to your browser — it is not server data.</div>
+          <div id="rememberedList"></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-about">
+        <h1 class="page-h">Documentation</h1>
+        <p class="page-sub">About TRACESEAL and this console.</p>
+
+        <div class="card">
+          <h2>What TRACESEAL does</h2>
+          <p style="color:var(--muted);font-size:0.9rem">TRACESEAL converts a live HTTPS response into <strong>cryptographically verifiable evidence</strong> using <a href="https://tlsnotary.org" target="_blank" rel="noopener">TLSNotary</a> MPC-TLS. A proof package (<code>attestation.tlsn</code>, <code>presentation.tlsn</code>, <code>request.json</code>) is verified by a pinned TLSNotary verifier; only verified evidence is stored with a canonical commitment and a <code>ts1_</code> identifier.</p>
+        </div>
+
+        <div class="card">
+          <h2>API endpoints</h2>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge neutral">GET</span></td><td class="mono-id">/health</td><td>Service status, schema and trust policy</td></tr>
+              <tr><td><span class="badge neutral">POST</span></td><td class="mono-id">/api/v1/evidence</td><td>Multipart upload → verify &amp; store</td></tr>
+              <tr><td><span class="badge neutral">GET</span></td><td class="mono-id">/api/v1/evidence/{id}</td><td>Evidence metadata + original verification</td></tr>
+              <tr><td><span class="badge neutral">GET</span></td><td class="mono-id">/api/v1/evidence/{id}/artifacts/{type}</td><td>Download attestation / presentation / request_manifest</td></tr>
+              <tr><td><span class="badge neutral">GET</span></td><td class="mono-id">/api/v1/evidence/{id}/verifications</td><td>Original + reverification reports</td></tr>
+              <tr><td><span class="badge neutral">POST</span></td><td class="mono-id">/api/v1/evidence/{id}/reverify</td><td>Re-run verifier on stored artifacts</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="card">
+          <h2>Trust model &amp; limitations</h2>
+          <ul style="color:var(--muted);font-size:0.88rem;padding-left:1.2rem">
+            <li>Demo attestor key is public test material — not production trust.</li>
+            <li>Single-user local deployment; no authentication or multi-user ownership.</li>
+            <li>Fixture endpoints only: <code>https://localhost:4443/trace-seal-{503,200,404,delay}</code>, TLS 1.2.</li>
+            <li>Hedera anchoring is planned, not implemented.</li>
+          </ul>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
-let currentEvidenceId = null;
+const EVIDENCE_ID_RE = /^ts1_[0-9a-f]{64}$/;
+const ARTIFACT_TYPES = [
+  { type: "attestation", label: "Attestation", file: "attestation.tlsn", hint: "TLSNotary attestation transcript" },
+  { type: "presentation", label: "Presentation", file: "presentation.tlsn", hint: "Selected-disclosure proof" },
+  { type: "request_manifest", label: "Request manifest", file: "request.json", hint: "Canonical request JSON" },
+];
 
-function setStatus(el, msg, cls) {
-  el.textContent = msg;
-  el.className = "status-line " + (cls || "info");
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function setStatus(elm, msg, cls) {
+  elm.textContent = msg || "";
+  elm.className = "status-line " + (cls || "info");
+}
+function toast(msg, kind) {
+  const t = el("div", "toast " + (kind || ""), msg);
+  $("toastWrap").appendChild(t);
+  setTimeout(() => t.remove(), 4200);
+}
+function fmtBytes(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1048576).toFixed(1) + " MB";
+}
+function fmtTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleString();
+}
+function copyBtn(text) {
+  const b = el("button", "copy-btn", "copy");
+  b.type = "button";
+  b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Copied to clipboard", "ok");
+    } catch {
+      toast("Copy failed — select and copy manually", "err");
+    }
+  });
+  return b;
+}
+function badge(text, cls) {
+  return el("span", "badge " + (cls || text), text);
 }
 
 async function api(path, options) {
-  const res = await fetch(path, options);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 150000);
+  let res;
+  try {
+    res = await fetch(path, { ...options, signal: ctrl.signal });
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === "AbortError") throw new Error("Request timed out");
+    throw new Error("Cannot reach backend — is traceseal-core serve running?");
+  }
+  clearTimeout(timer);
   const text = await res.text();
   let body = null;
   try { body = text ? JSON.parse(text) : null; } catch { body = { raw: text }; }
@@ -214,6 +581,7 @@ async function api(path, options) {
     const detail = body && body.error ? body.error.message : ("HTTP " + res.status);
     const err = new Error(detail);
     err.status = res.status;
+    err.code = body && body.error ? body.error.code : null;
     err.body = body;
     throw err;
   }
@@ -221,125 +589,438 @@ async function api(path, options) {
 }
 
 async function refreshHealth() {
-  const el = $("health");
+  const pill = $("healthPill");
   try {
     const h = await api("/health");
-    el.textContent = "healthy · schema " + h.schema_version + " · " + h.trust_policy_id;
-    el.className = "health ok";
-  } catch (e) {
-    el.textContent = "unreachable";
-    el.className = "health err";
+    $("healthText").textContent = "healthy · schema " + h.schema_version + " · " + h.trust_policy_id;
+    pill.className = "health-pill ok";
+    renderOverviewHealth(h);
+  } catch {
+    $("healthText").textContent = "backend unreachable";
+    pill.className = "health-pill err";
+    const oh = $("overviewHealth");
+    if (oh) {
+      oh.innerHTML = "";
+      const a = el("div", "alert err");
+      a.appendChild(el("div", "alert-title", "Backend unreachable"));
+      a.appendChild(el("div", null, "The API is not responding. Start it with: traceseal-core serve --bind 127.0.0.1:3000 --storage-dir demo-store"));
+      oh.appendChild(a);
+    }
+  }
+}
+function renderOverviewHealth(h) {
+  const box = $("overviewHealth");
+  if (!box || !h) return;
+  box.innerHTML = "";
+  const grid = el("div", "stat-row");
+  const stats = [
+    ["Service", h.service], ["Version", h.version],
+    ["Schema", h.schema_version], ["TLSNotary", h.tlsnotary_version],
+    ["Trust policy", h.trust_policy_id], ["Status", h.status],
+  ];
+  for (const [label, value] of stats) {
+    const s = el("div", "stat");
+    s.appendChild(el("div", "s-label", label));
+    s.appendChild(el("div", "s-value", value || "—"));
+    grid.appendChild(s);
+  }
+  box.appendChild(grid);
+}
+
+const LS_KEY = "traceseal.recent";
+function getRecent() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch { return []; }
+}
+function remember(id) {
+  if (!EVIDENCE_ID_RE.test(id)) return;
+  const list = getRecent().filter(x => x !== id);
+  list.unshift(id);
+  localStorage.setItem(LS_KEY, JSON.stringify(list.slice(0, 20)));
+  renderRemembered();
+  renderRecent();
+}
+function renderRemembered() {
+  const box = $("rememberedList");
+  if (!box) return;
+  const list = getRecent();
+  box.innerHTML = "";
+  if (!list.length) {
+    box.appendChild(el("p", "empty", "No evidence IDs remembered yet."));
+    return;
+  }
+  const wrap = el("div", "table-wrap");
+  const table = el("table");
+  const thead = el("thead");
+  const hr = el("tr");
+  for (const h of ["Evidence ID", ""]) { const th = el("th", null, h); hr.appendChild(th); }
+  thead.appendChild(hr); table.appendChild(thead);
+  const tbody = el("tbody");
+  for (const id of list) {
+    const tr = el("tr");
+    const td = el("td");
+    td.appendChild(el("span", "mono-id", id));
+    const td2 = el("td");
+    const a = el("a", null, "view");
+    a.href = "#/explorer";
+    a.addEventListener("click", () => { $("lookupId").value = id; });
+    td2.appendChild(a);
+    tr.appendChild(td); tr.appendChild(td2);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody); wrap.appendChild(table); box.appendChild(wrap);
+}
+
+const files = { attestation: null, presentation: null, request_manifest: null };
+
+function renderDropzone(kind) {
+  const dz = document.querySelector('.dropzone[data-kind="' + kind + '"]');
+  if (!dz) return;
+  dz.querySelectorAll(".dz-name,.dz-meta,.dz-actions,.dz-hint").forEach(n => n.remove());
+  const f = files[kind];
+  if (!f) {
+    dz.insertAdjacentHTML("beforeend", '<div class="dz-hint" style="font-size:0.8rem;color:var(--muted)">Drop or click to browse</div>');
+    return;
+  }
+  dz.appendChild(el("div", "dz-name", f.name));
+  dz.appendChild(el("div", "dz-meta", fmtBytes(f.size)));
+  const actions = el("div", "dz-actions");
+  const rm = el("button", "btn ghost sm", "Remove");
+  rm.type = "button";
+  rm.addEventListener("click", (e) => { e.stopPropagation(); files[kind] = null; renderDropzone(kind); updateSubmitState(); });
+  actions.appendChild(rm);
+  dz.appendChild(actions);
+}
+
+function updateSubmitState() {
+  const ready = ARTIFACT_TYPES.every(a => files[a.type]);
+  $("submitBtn").disabled = !ready;
+  const sum = $("submitSummary");
+  const body = $("submitSummaryBody");
+  body.innerHTML = "";
+  sum.classList.toggle("hidden", !ready);
+  if (ready) {
+    for (const a of ARTIFACT_TYPES) {
+      const tr = el("tr");
+      tr.appendChild(el("td", null, a.label));
+      const tdF = el("td"); tdF.appendChild(el("span", "mono-id", files[a.type].name)); tr.appendChild(tdF);
+      tr.appendChild(el("td", null, fmtBytes(files[a.type].size)));
+      const tdA = el("td");
+      const rm = el("button", "btn ghost sm", "remove");
+      rm.type = "button";
+      rm.addEventListener("click", () => { files[a.type] = null; renderDropzone(a.type); updateSubmitState(); });
+      tdA.appendChild(rm);
+      tr.appendChild(tdA);
+      body.appendChild(tr);
+    }
   }
 }
 
+for (const a of ARTIFACT_TYPES) {
+  const input = $("file-" + a.type);
+  const dz = document.querySelector('.dropzone[data-kind="' + a.type + '"]');
+  input.addEventListener("change", () => {
+    files[a.type] = input.files[0] || null;
+    renderDropzone(a.type);
+    updateSubmitState();
+  });
+  ["dragover", "dragleave", "drop"].forEach(ev => {
+    dz.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dz.classList.toggle("dragover", ev === "dragover");
+      if (ev === "drop") {
+        const f = e.dataTransfer.files[0];
+        if (f) {
+          files[a.type] = f;
+          renderDropzone(a.type);
+          updateSubmitState();
+        }
+      }
+    });
+  });
+}
+$("clearFilesBtn").addEventListener("click", () => {
+  for (const a of ARTIFACT_TYPES) {
+    files[a.type] = null;
+    $("file-" + a.type).value = "";
+    renderDropzone(a.type);
+  }
+  updateSubmitState();
+  $("submitResult").innerHTML = "";
+  setStatus($("submitStatus"), "", "info");
+});
+
 $("submitBtn").addEventListener("click", async () => {
-  const att = $("attestation").files[0];
-  const pres = $("presentation").files[0];
-  const man = $("manifest").files[0];
-  const status = $("submitStatus");
-  if (!att || !pres || !man) {
-    setStatus(status, "Select all three artifact files first.", "err");
+  if (!ARTIFACT_TYPES.every(a => files[a.type])) {
+    setStatus($("submitStatus"), "Select all three files first.", "err");
     return;
   }
   const fd = new FormData();
-  fd.append("attestation", att, "attestation.tlsn");
-  fd.append("presentation", pres, "presentation.tlsn");
-  fd.append("request_manifest", man, "request.json");
+  fd.append("attestation", files.attestation, "attestation.tlsn");
+  fd.append("presentation", files.presentation, "presentation.tlsn");
+  fd.append("request_manifest", files.request_manifest, "request.json");
   $("submitBtn").disabled = true;
-  setStatus(status, "Verifying proof with TLSNotary… this can take up to a minute.", "info");
-  $("submitResult").classList.add("hidden");
+  setStatus($("submitStatus"), "Verifying proof with TLSNotary — this can take up to a minute…", "info");
+  $("submitResult").innerHTML = "";
   try {
     const receipt = await api("/api/v1/evidence", { method: "POST", body: fd });
-    $("rEvidenceId").textContent = receipt.evidence_id;
-    $("rCommitment").textContent = receipt.commitment;
-    $("rDisposition").innerHTML = '<span class="badge ' + receipt.disposition + '">' + receipt.disposition + "</span>";
-    $("rStoredAt").textContent = receipt.stored_at;
-    $("submitResult").classList.remove("hidden");
-    setStatus(status, "Evidence " + (receipt.disposition === "stored" ? "stored" : "already present") + ".", "ok");
+    remember(receipt.evidence_id);
+    renderSubmitSuccess(receipt);
+    setStatus($("submitStatus"), "Verification passed — evidence " + receipt.disposition.replace("_", " ") + ".", "ok");
+    toast("Evidence " + receipt.disposition + " — " + receipt.evidence_id.slice(0, 20) + "…", "ok");
     $("lookupId").value = receipt.evidence_id;
-    await loadEvidence(receipt.evidence_id);
   } catch (e) {
-    setStatus(status, "Submission failed: " + e.message, "err");
+    renderSubmitError(e);
+    setStatus($("submitStatus"), "Submission failed: " + e.message, "err");
   } finally {
-    $("submitBtn").disabled = false;
+    updateSubmitState();
   }
 });
 
-async function loadEvidence(id) {
-  const status = $("lookupStatus");
-  $("lookupResult").classList.add("hidden");
-  setStatus(status, "Loading…", "info");
+function renderSubmitSuccess(r) {
+  const box = $("submitResult");
+  box.innerHTML = "";
+  const card = el("div", "card");
+  card.style.borderColor = "rgba(63,185,80,0.4)";
+  card.appendChild(el("h2", null, "Evidence stored"));
+  const alert = el("div", "alert ok");
+  alert.appendChild(el("div", "alert-title", "Verification succeeded"));
+  alert.appendChild(el("div", null, "The TLSNotary verifier confirmed this proof. The evidence record is now persisted and can be re-verified at any time."));
+  card.appendChild(alert);
+  const dl = el("dl", "kv");
+  const rows = [
+    ["Evidence ID", r.evidence_id], ["Commitment", r.commitment],
+    ["Disposition", r.disposition], ["Stored at", fmtTime(r.stored_at)],
+  ];
+  for (const [k, v] of rows) {
+    dl.appendChild(el("dt", null, k));
+    const dd = el("dd");
+    dd.appendChild(el("span", null, v));
+    if (k === "Evidence ID") dd.appendChild(copyBtn(r.evidence_id));
+    dl.appendChild(dd);
+  }
+  card.appendChild(dl);
+  const br = el("div", "btn-row");
+  const view = el("a", "btn secondary", "View evidence");
+  view.href = "#/explorer";
+  view.addEventListener("click", () => { $("lookupId").value = r.evidence_id; });
+  br.appendChild(view);
+  const again = el("button", "btn ghost", "Submit another");
+  again.type = "button";
+  again.addEventListener("click", () => { $("clearFilesBtn").click(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  br.appendChild(again);
+  card.appendChild(br);
+  box.appendChild(card);
+}
+
+function renderSubmitError(e) {
+  const box = $("submitResult");
+  box.innerHTML = "";
+  const card = el("div", "card");
+  card.style.borderColor = "rgba(248,81,73,0.4)";
+  card.appendChild(el("h2", null, "Verification rejected"));
+  const alert = el("div", "alert err");
+  alert.appendChild(el("div", "alert-title", e.code === "VERIFICATION_REJECTED" ? "Cryptographic verification failed" : "Submission error"));
+  alert.appendChild(el("div", null, e.message));
+  if (e.code === "VERIFICATION_REJECTED") {
+    const p = el("div", null, "The TLSNotary verifier rejected this proof. The evidence was NOT stored. Check that the package is genuine and unmodified.");
+    p.style.marginTop = "0.4rem";
+    alert.appendChild(p);
+  }
+  card.appendChild(alert);
+  box.appendChild(card);
+}
+
+function renderEvidenceDetail(meta, history) {
+  const box = $("evidenceDetail");
+  box.innerHTML = "";
+  const card = el("div", "card");
+  card.appendChild(el("h2", null, "Evidence record"));
+
+  const head = el("div");
+  head.style.cssText = "display:flex;align-items:center;gap:0.7rem;flex-wrap:wrap;margin-bottom:0.8rem";
+  const report = meta.original_verification || {};
+  head.appendChild(badge(report.verification_status || "UNKNOWN"));
+  head.appendChild(el("span", "mono-id", meta.evidence_id));
+  head.appendChild(copyBtn(meta.evidence_id));
+  card.appendChild(head);
+
+  const tabs = el("div", "tabs");
+  const panels = {};
+  const tabDefs = [
+    ["overview", "Overview"], ["metadata", "Metadata"], ["artifacts", "Artifacts"], ["history", "Verification history"],
+  ];
+  const content = el("div");
+  for (const [key, label] of tabDefs) {
+    const b = el("button", null, label);
+    b.type = "button";
+    const panel = el("div");
+    panel.style.display = "none";
+    panels[key] = panel;
+    b.addEventListener("click", () => {
+      tabs.querySelectorAll("button").forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      for (const k in panels) panels[k].style.display = k === key ? "block" : "none";
+    });
+    if (key === "overview") b.classList.add("active");
+    tabs.appendChild(b);
+    content.appendChild(panel);
+  }
+  card.appendChild(tabs);
+  card.appendChild(content);
+
+  const ov = panels.overview;
+  const stats = el("div", "stat-row");
+  const statDefs = [
+    ["HTTP status", report.http_status != null ? String(report.http_status) : "—"],
+    ["Verified at", fmtTime(report.verified_at)],
+    ["Verifier", (report.verifier && report.verifier.version) || "—"],
+    ["Reverifications", String(meta.reverifications_count || 0)],
+  ];
+  for (const [l, v] of statDefs) {
+    const s = el("div", "stat");
+    s.appendChild(el("div", "s-label", l));
+    s.appendChild(el("div", "s-value", v));
+    stats.appendChild(s);
+  }
+  ov.appendChild(stats);
+  ov.appendChild(el("h3", null, "Verified request"));
+  const vr = (meta.record && meta.record.payload && meta.record.payload.verified_request) || report.verified_request || {};
+  const vrDl = el("dl", "kv");
+  vrDl.appendChild(el("dt", null, "Method")); vrDl.appendChild(el("dd", null, vr.method || "—"));
+  vrDl.appendChild(el("dt", null, "URL")); vrDl.appendChild(el("dd", null, vr.scheme ? (vr.scheme + "://" + vr.host + vr.path) : "—"));
+  ov.appendChild(vrDl);
+  if (report.errors && report.errors.length) {
+    ov.appendChild(el("h3", null, "Verifier errors"));
+    const ul = el("ul");
+    ul.style.cssText = "color:var(--err);font-size:0.82rem;padding-left:1.2rem";
+    for (const er of report.errors) ul.appendChild(el("li", null, er));
+    ov.appendChild(ul);
+  }
+
+  const md = panels.metadata;
+  md.appendChild(el("h3", null, "Record"));
+  const dl1 = el("dl", "kv");
+  dl1.appendChild(el("dt", null, "Evidence ID")); dl1.appendChild(el("dd", null, meta.evidence_id));
+  dl1.appendChild(el("dt", null, "Commitment")); dl1.appendChild(el("dd", null, meta.commitment));
+  dl1.appendChild(el("dt", null, "Stored at")); dl1.appendChild(el("dd", null, fmtTime(meta.stored_at)));
+  dl1.appendChild(el("dt", null, "Schema")); dl1.appendChild(el("dd", null, (meta.record && meta.record.schema_version) || "—"));
+  md.appendChild(dl1);
+  const fields = (meta.record && meta.record.payload && meta.record.payload.disclosed_fields) || {};
+  md.appendChild(el("h3", null, "Disclosed fields"));
+  const names = Object.keys(fields);
+  if (!names.length) {
+    md.appendChild(el("p", "empty", "No disclosed fields recorded."));
+  } else {
+    const wrap = el("div", "table-wrap");
+    const t = el("table");
+    const th = el("thead"); const thr = el("tr");
+    thr.appendChild(el("th", null, "Field")); thr.appendChild(el("th", null, "Value"));
+    th.appendChild(thr); t.appendChild(th);
+    const tb = el("tbody");
+    for (const n of names) {
+      const tr = el("tr");
+      tr.appendChild(el("td", null, n));
+      tr.appendChild(el("td", null, typeof fields[n] === "object" ? JSON.stringify(fields[n]) : String(fields[n])));
+      tb.appendChild(tr);
+    }
+    t.appendChild(tb); wrap.appendChild(t); md.appendChild(wrap);
+  }
+  const payload = (meta.record && meta.record.payload) || {};
+  if (payload.disclosed_http_status != null) {
+    md.appendChild(el("h3", null, "Disclosed HTTP status"));
+    md.appendChild(el("p", null, String(payload.disclosed_http_status)));
+  }
+
+  const ar = panels.artifacts;
+  ar.appendChild(el("p", null, "Exact stored bytes, retrievable via the artifact endpoint."));
+  ar.style.color = "var(--muted)";
+  ar.style.fontSize = "0.85rem";
+  const list = el("div", "artifact-list");
+  list.style.marginTop = "0.8rem";
+  for (const a of ARTIFACT_TYPES) {
+    const item = el("div", "artifact-item");
+    const left = el("div");
+    left.appendChild(el("div", "a-name", a.file));
+    left.appendChild(el("div", "a-hint", a.hint));
+    item.appendChild(left);
+    const sp = el("div", "spacer"); item.appendChild(sp);
+    const link = el("a", "dl", "Download");
+    link.href = "/api/v1/evidence/" + encodeURIComponent(meta.evidence_id) + "/artifacts/" + a.type;
+    link.download = a.file;
+    item.appendChild(link);
+    list.appendChild(item);
+  }
+  ar.appendChild(list);
+
+  const hp = panels.history;
+  const rows = [];
+  if (history && history.original_verification) rows.push(["original", history.original_verification]);
+  if (history) for (const r of history.reverifications || []) rows.push(["reverification", r]);
+  if (!rows.length) {
+    hp.appendChild(el("p", "empty", "No verification records."));
+  } else {
+    const wrap = el("div", "table-wrap");
+    const t = el("table");
+    const th = el("thead"); const thr = el("tr");
+    for (const h of ["Kind", "Status", "Verified at", "Verifier"]) thr.appendChild(el("th", null, h));
+    th.appendChild(thr); t.appendChild(th);
+    const tb = el("tbody");
+    for (const [kind, r] of rows) {
+      const tr = el("tr");
+      const tdK = el("td"); tdK.appendChild(badge(kind)); tr.appendChild(tdK);
+      const tdS = el("td"); tdS.appendChild(badge(r.verification_status || "?")); tr.appendChild(tdS);
+      tr.appendChild(el("td", null, fmtTime(r.verified_at)));
+      tr.appendChild(el("td", null, (r.verifier && r.verifier.version) || "—"));
+      tb.appendChild(tr);
+    }
+    t.appendChild(tb); wrap.appendChild(t); hp.appendChild(wrap);
+  }
+  const br = el("div", "btn-row");
+  const rv = el("button", "btn secondary", "Re-verify proof");
+  rv.type = "button";
+  rv.id = "reverifyBtn";
+  const rvStatus = el("div", "status-line info");
+  rvStatus.setAttribute("role", "status");
+  rv.addEventListener("click", async () => {
+    rv.disabled = true;
+    setStatus(rvStatus, "Re-verifying with TLSNotary…", "info");
+    try {
+      const res = await api("/api/v1/evidence/" + encodeURIComponent(meta.evidence_id) + "/reverify", { method: "POST" });
+      setStatus(rvStatus, "Re-verification " + res.status + " — " + (res.verification && res.verification.verification_status), "ok");
+      toast("Re-verification complete", "ok");
+      const fresh = await api("/api/v1/evidence/" + encodeURIComponent(meta.evidence_id));
+      const freshH = await api("/api/v1/evidence/" + encodeURIComponent(meta.evidence_id) + "/verifications");
+      renderEvidenceDetail(fresh, freshH);
+    } catch (e) {
+      setStatus(rvStatus, "Re-verification failed: " + e.message, "err");
+    } finally {
+      const nb = $("reverifyBtn");
+      if (nb) nb.disabled = false;
+    }
+  });
+  br.appendChild(rv);
+  hp.appendChild(br);
+  hp.appendChild(rvStatus);
+
+  box.appendChild(card);
+}
+
+async function loadEvidence(id, statusEl) {
+  const status = statusEl || $("lookupStatus");
+  $("evidenceDetail").innerHTML = "";
+  if (!EVIDENCE_ID_RE.test(id)) {
+    setStatus(status, "Invalid evidence ID — expected ts1_ + 64 lowercase hex characters.", "err");
+    return;
+  }
+  setStatus(status, "Loading evidence…", "info");
   try {
     const meta = await api("/api/v1/evidence/" + encodeURIComponent(id));
     const history = await api("/api/v1/evidence/" + encodeURIComponent(id) + "/verifications");
-    currentEvidenceId = id;
-    renderMetadata(meta);
-    renderHistory(history);
-    $("lookupResult").classList.remove("hidden");
+    renderEvidenceDetail(meta, history);
+    remember(id);
     setStatus(status, "Loaded.", "ok");
   } catch (e) {
     setStatus(status, "Lookup failed: " + e.message, "err");
-  }
-}
-
-function renderMetadata(meta) {
-  $("mEvidenceId").textContent = meta.evidence_id;
-  $("mCommitment").textContent = meta.commitment;
-  $("mStoredAt").textContent = meta.stored_at;
-  const report = meta.original_verification || {};
-  const status = report.verification_status || "UNKNOWN";
-  $("mVerification").innerHTML = '<span class="badge ' + status + '">' + status + "</span>";
-  $("mHttpStatus").textContent = report.http_status != null ? report.http_status : "—";
-  const vr = (meta.record && meta.record.payload && meta.record.payload.verified_request) || {};
-  $("mRequest").textContent = vr.method ? (vr.method + " " + vr.scheme + "://" + vr.host + vr.path) : "—";
-  $("mReverifyCount").textContent = String(meta.reverifications_count || 0);
-
-  const fields = (meta.record && meta.record.payload && meta.record.payload.disclosed_fields) || {};
-  const tbody = $("disclosedTable").querySelector("tbody");
-  tbody.innerHTML = "";
-  const names = Object.keys(fields);
-  $("disclosedEmpty").classList.toggle("hidden", names.length > 0);
-  for (const name of names) {
-    const tr = document.createElement("tr");
-    const td1 = document.createElement("td");
-    td1.textContent = name;
-    const td2 = document.createElement("td");
-    td2.textContent = typeof fields[name] === "object" ? JSON.stringify(fields[name]) : String(fields[name]);
-    tr.appendChild(td1); tr.appendChild(td2);
-    tbody.appendChild(tr);
-  }
-
-  const links = $("artifactLinks");
-  links.innerHTML = "";
-  for (const type of ["attestation", "presentation", "request_manifest"]) {
-    const a = document.createElement("a");
-    a.href = "/api/v1/evidence/" + encodeURIComponent(meta.evidence_id) + "/artifacts/" + type;
-    a.textContent = type;
-    a.download = type === "request_manifest" ? "request.json" : type + ".tlsn";
-    links.appendChild(a);
-  }
-}
-
-function renderHistory(history) {
-  const tbody = $("historyTable").querySelector("tbody");
-  tbody.innerHTML = "";
-  const rows = [];
-  if (history.original_verification) rows.push(["original", history.original_verification]);
-  for (const r of history.reverifications || []) rows.push(["reverification", r]);
-  $("historyEmpty").classList.toggle("hidden", rows.length > 0);
-  for (const [kind, r] of rows) {
-    const tr = document.createElement("tr");
-    const cells = [kind, r.verification_status || "?", r.verified_at || "—", (r.verifier && r.verifier.version) || "—"];
-    for (const c of cells) {
-      const td = document.createElement("td");
-      if (c === r.verification_status) {
-        td.innerHTML = '<span class="badge ' + c + '">' + c + "</span>";
-      } else {
-        td.textContent = c;
-      }
-      tr.appendChild(td);
-    }
-    tbody.appendChild(tr);
   }
 }
 
@@ -348,29 +1029,125 @@ $("lookupBtn").addEventListener("click", () => {
   if (!id) { setStatus($("lookupStatus"), "Enter an evidence ID.", "err"); return; }
   loadEvidence(id);
 });
+$("lookupId").addEventListener("keydown", (e) => { if (e.key === "Enter") $("lookupBtn").click(); });
 
-$("lookupId").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") $("lookupBtn").click();
+$("historyBtn").addEventListener("click", () => {
+  const id = $("historyId").value.trim();
+  if (!id) { setStatus($("historyStatus"), "Enter an evidence ID.", "err"); return; }
+  if (!EVIDENCE_ID_RE.test(id)) { setStatus($("historyStatus"), "Invalid evidence ID format.", "err"); return; }
+  $("historyResult").innerHTML = "";
+  setStatus($("historyStatus"), "Loading verification history…", "info");
+  api("/api/v1/evidence/" + encodeURIComponent(id) + "/verifications")
+    .then(h => {
+      const box = $("historyResult");
+      box.innerHTML = "";
+      const card = el("div", "card");
+      card.appendChild(el("h2", null, "Verification history"));
+      const p = el("p", null, id);
+      p.style.color = "var(--muted)";
+      card.appendChild(p);
+      const rows = [];
+      if (h.original_verification) rows.push(["original", h.original_verification]);
+      for (const r of h.reverifications || []) rows.push(["reverification", r]);
+      if (!rows.length) { card.appendChild(el("p", "empty", "No verification records.")); }
+      else {
+        const wrap = el("div", "table-wrap");
+        const t = el("table");
+        const th = el("thead"); const thr = el("tr");
+        for (const h2 of ["Kind", "Status", "Verified at", "Verifier version", "HTTP status"]) thr.appendChild(el("th", null, h2));
+        th.appendChild(thr); t.appendChild(th);
+        const tb = el("tbody");
+        for (const [kind, r] of rows) {
+          const tr = el("tr");
+          const tdK = el("td"); tdK.appendChild(badge(kind)); tr.appendChild(tdK);
+          const tdS = el("td"); tdS.appendChild(badge(r.verification_status || "?")); tr.appendChild(tdS);
+          tr.appendChild(el("td", null, fmtTime(r.verified_at)));
+          tr.appendChild(el("td", null, (r.verifier && r.verifier.version) || "—"));
+          tr.appendChild(el("td", null, r.http_status != null ? String(r.http_status) : "—"));
+          tb.appendChild(tr);
+        }
+        t.appendChild(tb); wrap.appendChild(t); card.appendChild(wrap);
+      }
+      const br = el("div", "btn-row");
+      const open = el("a", "btn secondary", "Open in explorer");
+      open.href = "#/explorer";
+      open.addEventListener("click", () => { $("lookupId").value = id; });
+      br.appendChild(open);
+      card.appendChild(br);
+      box.appendChild(card);
+      setStatus($("historyStatus"), "Loaded " + rows.length + " record(s).", "ok");
+    })
+    .catch(e => {
+      $("historyResult").innerHTML = "";
+      setStatus($("historyStatus"), "Failed: " + e.message, "err");
+    });
 });
+$("historyId").addEventListener("keydown", (e) => { if (e.key === "Enter") $("historyBtn").click(); });
 
-$("reverifyBtn").addEventListener("click", async () => {
-  if (!currentEvidenceId) return;
-  const status = $("reverifyStatus");
-  $("reverifyBtn").disabled = true;
-  setStatus(status, "Re-verifying proof with TLSNotary…", "info");
-  try {
-    const res = await api("/api/v1/evidence/" + encodeURIComponent(currentEvidenceId) + "/reverify", { method: "POST" });
-    setStatus(status, "Re-verification " + res.status + " (" + (res.verification && res.verification.verification_status) + ").", "ok");
-    await loadEvidence(currentEvidenceId);
-  } catch (e) {
-    setStatus(status, "Re-verification failed: " + e.message, "err");
-  } finally {
-    $("reverifyBtn").disabled = false;
+function renderRecent() {
+  const box = $("recentEvidence");
+  if (!box) return;
+  const list = getRecent().slice(0, 5);
+  box.innerHTML = "";
+  if (!list.length) {
+    const empty = el("div", "empty");
+    empty.appendChild(el("div", "icon", "🗂"));
+    empty.appendChild(el("p", null, "No evidence viewed in this browser yet."));
+    empty.appendChild(el("p", "hint", "IDs you look up or submit are remembered locally."));
+    box.appendChild(empty);
+    return;
   }
+  const wrap = el("div", "table-wrap");
+  const t = el("table");
+  const th = el("thead"); const thr = el("tr");
+  for (const h of ["Evidence ID", ""]) thr.appendChild(el("th", null, h));
+  th.appendChild(thr); t.appendChild(th);
+  const tb = el("tbody");
+  for (const id of list) {
+    const tr = el("tr");
+    const td = el("td"); td.appendChild(el("span", "mono-id", id)); tr.appendChild(td);
+    const td2 = el("td");
+    const a = el("a", null, "view");
+    a.href = "#/explorer";
+    a.addEventListener("click", () => { $("lookupId").value = id; });
+    td2.appendChild(a);
+    tr.appendChild(td2); tb.appendChild(tr);
+  }
+  t.appendChild(tb); wrap.appendChild(t); box.appendChild(wrap);
+}
+
+const PAGES = ["overview", "submit", "explorer", "history", "about"];
+const TITLES = { overview: "Overview", submit: "Submit Evidence", explorer: "Evidence Explorer", history: "Verification History", about: "Documentation" };
+function route() {
+  const hash = (location.hash || "#/overview").replace(/^#\/?/, "");
+  const page = PAGES.includes(hash) ? hash : "overview";
+  document.querySelectorAll(".page").forEach(p => p.classList.toggle("active", p.id === "page-" + page));
+  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("active", a.dataset.page === page));
+  $("pageTitle").textContent = TITLES[page];
+  $("sidebar").classList.remove("open");
+  $("scrim").classList.remove("show");
+  if (page === "overview") renderRecent();
+  if (page === "history") renderRemembered();
+}
+window.addEventListener("hashchange", route);
+$("menuBtn").addEventListener("click", () => {
+  $("sidebar").classList.toggle("open");
+  $("scrim").classList.toggle("show", $("sidebar").classList.contains("open"));
+});
+$("scrim").addEventListener("click", () => {
+  $("sidebar").classList.remove("open");
+  $("scrim").classList.remove("show");
 });
 
+renderDropzone("attestation");
+renderDropzone("presentation");
+renderDropzone("request_manifest");
+updateSubmitState();
+renderRemembered();
+renderRecent();
 refreshHealth();
 setInterval(refreshHealth, 30000);
+route();
 </script>
 </body>
 </html>
