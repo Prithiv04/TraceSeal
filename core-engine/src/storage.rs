@@ -101,6 +101,43 @@ pub struct EvidenceStore {
 }
 
 impl EvidenceStore {
+    /// Perform a lightweight read‑only health check.
+    ///
+    /// Returns `Ok(())` if the SQLite metadata database can be opened in
+    /// read‑only mode and a trivial SELECT query succeeds. This method does
+    /// not create or modify any database structures, evidence records, or
+    /// verification history.
+    ///
+    /// All errors are mapped to the existing `StorageError` variants.
+    pub fn health_check(&self) -> Result<(), StorageError> {
+        // Ensure the database file exists before attempting a read‑only open.
+        if !self.database_path.is_file() {
+            return Err(StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "metadata database missing",
+            )));
+        }
+        // Verify the file is not a symlink (same protection as normal `open`).
+        reject_symlink_if_present(&self.database_path)?;
+        // Open a read‑only SQLite connection.
+        let conn = rusqlite::Connection::open_with_flags(
+            &self.database_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .map_err(StorageError::Database)?;
+        // Execute a simple harmless query.
+        conn.prepare_cached("SELECT 1")
+            .and_then(|mut stmt| stmt.query_row([], |_| Ok(())))
+            .map_err(StorageError::Database)
+    }
+
+    fn connect(&self) -> Result<Connection, StorageError> {
+        reject_symlink_if_present(&self.database_path)?;
+        let connection = Connection::open(&self.database_path)?;
+        connection.busy_timeout(Duration::from_secs(10))?;
+        connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL;")?;
+        Ok(connection)
+    }
     pub fn open(root: impl AsRef<Path>) -> Result<Self, StorageError> {
         let configured_root = root.as_ref();
         match fs::symlink_metadata(configured_root) {

@@ -45,6 +45,16 @@ enum Command {
         #[arg(long)]
         package: PathBuf,
     },
+    Serve {
+        #[arg(long, default_value = "127.0.0.1:3000")]
+        bind: String,
+        #[arg(long, default_value = "evidence-store")]
+        storage_dir: PathBuf,
+        #[arg(long, default_value_t = 4)]
+        max_concurrency: usize,
+        #[arg(long, default_value_t = 60)]
+        verifier_timeout_seconds: u64,
+    },
 }
 
 #[tokio::main]
@@ -110,6 +120,29 @@ async fn main() {
                     eprintln!("inspect failed: {e}");
                     std::process::exit(2)
                 }
+            }
+        }
+        Command::Serve {
+            bind,
+            storage_dir,
+            max_concurrency,
+            verifier_timeout_seconds,
+        } => {
+            let addr: std::net::SocketAddr = bind.parse().expect("valid socket address to bind");
+            if !addr.ip().is_loopback() {
+                eprintln!("WARNING: TRACESEAL is a demonstration prototype. Binding to non-loopback addresses without authentication is insecure.");
+            }
+            let store = traceseal_core::storage::EvidenceStore::open(&storage_dir)
+                .expect("initialize evidence storage");
+            let state = std::sync::Arc::new(traceseal_core::api::AppState::with_options(
+                store,
+                max_concurrency,
+                std::time::Duration::from_secs(verifier_timeout_seconds),
+            ));
+            println!("TRACESEAL HTTP API listening on http://{bind}");
+            if let Err(e) = traceseal_core::api::run_server(addr, state).await {
+                eprintln!("server error: {e}");
+                std::process::exit(2);
             }
         }
     }
