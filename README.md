@@ -7,7 +7,8 @@ TRACESEAL Phase 1 established TLSNotary feasibility. Phase 2 adds a local Rust C
 - TLSNotary Rust crates are pinned to `v0.1.0-alpha.15` (Git revision `47aee45b`). The separate `tlsnotary/` checkout remains at `d446234`, package version `0.1.0-alpha.15`.
 - The CLI supports only `GET https://localhost:4443/trace-seal-{503,200,404,delay}` and only a finite set of explicit top-level response fields (`status`, `error`, `service`, `message`). It does not claim arbitrary public-site compatibility.
 - The fixture serves deterministic TLS 1.2 responses. TLS 1.3 compatibility has not been tested or claimed.
-- The Rust library has a local SQLite/filesystem evidence store. No HTTP API, authentication/ownership system, frontend, or Hedera integration is implemented.
+- The Rust library has a local SQLite/filesystem evidence store.
+- The `serve` command runs an HTTP API (loopback `127.0.0.1:3000` by default) with a built-in evidence console frontend at `/`. There is no authentication/ownership system and no Hedera integration.
 
 ## Build and test
 
@@ -73,6 +74,22 @@ The notary and prover run in the same local demo CLI process; only the presentat
 Phase 1 artifacts remain in `phase1-artifacts/` with their original SHA-256 hashes documented in `docs/TECHNICAL_FEASIBILITY.md`. The root `.gitignore` excludes the workspace toolchain and nested upstream checkout; it does not exclude those Phase 1 artifacts.
 
 The retained Phase 2 CLI demonstration is in `phase2-artifacts/1793930213453613000-20468/`; it contains the genuine 503 attestation/presentation, request manifest, and successful separate-verifier report.
+
+## HTTP API and frontend
+
+`traceseal-core serve` starts the Axum API on `127.0.0.1:3000` (override with `--bind`; non-loopback binds print a warning). Options: `--storage-dir` (default `evidence-store`), `--max-concurrency` (default 4), `--verifier-timeout-seconds` (default 60, capped at 120 by the engine).
+
+Endpoints:
+
+- `GET /` and `GET /app` — built-in evidence console (static HTML/JS, no build step, same-origin so no CORS is required).
+- `GET /health` — service/schema/trust-policy status.
+- `POST /api/v1/evidence` — multipart upload with fields `attestation`, `presentation`, `request_manifest`. Runs the real TLSNotary verifier subprocess, then stores the evidence. Returns `201` (`stored`) or `200` (`already_present`); `422` on cryptographic rejection, `413` on oversized fields, `503` when the verifier concurrency limit is reached.
+- `GET /api/v1/evidence/{id}` — canonical evidence metadata plus the original verification report.
+- `GET /api/v1/evidence/{id}/artifacts/{attestation|presentation|request_manifest}` — exact stored bytes with `ETag`/`x-artifact-sha256` headers.
+- `GET /api/v1/evidence/{id}/verifications` — original plus reverification reports.
+- `POST /api/v1/evidence/{id}/reverify` — re-runs the verifier on stored artifacts and appends a `REVERIFICATION` record.
+
+The frontend submits real multipart uploads, displays verification outcomes, disclosed fields, artifact download links, and verification history, and surfaces backend errors. It contains no mock data.
 
 ## Phase 3 Step E: local evidence storage
 

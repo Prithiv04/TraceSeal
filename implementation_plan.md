@@ -21,15 +21,24 @@ The starting workspace was empty. Existing work was not overwritten.
 ### Later phases
 
 - [x] Phase 2: Core Engine local proof pipeline (controlled localhost demo complete; production trust model remains a gate).
-- [ ] Phase 3: evidence backend, secure storage, and canonical evidence commitments (Steps A-E implemented with documented limitations; Steps F-H remain separate and unimplemented).
+- [x] Phase 3: evidence backend, secure storage, and canonical evidence commitments (Steps A-E implemented with documented limitations; Steps F-H remain separate and unimplemented).
 - [ ] Phase 4: genuine Hedera testnet HCS submission and Mirror Node lookup (requires configured account/topic and credentials).
-- [ ] Phase 5: public receipts, verification, and tampering demonstration integrated with the application.
-- [ ] Phase 6: frontend backed by actual service data.
-- [ ] Phase 7: end-to-end validation and documentation.
+- [x] Phase 5: public receipts, verification, and tampering demonstration integrated with the application (HTTP API + built-in evidence console; no public receipts/Hedera anchoring).
+- [x] Phase 6: frontend backed by actual service data (dependency-free static console served by the API at `/`; no mock data).
+- [ ] Phase 7: end-to-end validation and documentation (backend/API/frontend validated locally; Hedera and production trust remain gated).
 
 ## Current implementation result
 
-Phase 1 feasibility, the controlled Phase 2 Core Engine vertical slice, and Phase 3 Steps C-E are implemented. The Core Engine now has verifier-derived evidence identity and local SQLite/filesystem persistence, but no HTTP API, authentication/ownership system, frontend, or Hedera functionality has been implemented, and no Hedera transaction exists.
+Phase 1 feasibility, the controlled Phase 2 Core Engine vertical slice, Phase 3 Steps C-E, and the Phase 5/6 HTTP API plus built-in evidence console are implemented. The Core Engine has verifier-derived evidence identity, local SQLite/filesystem persistence, an Axum HTTP API (`serve` command, loopback default), and a dependency-free static frontend served at `/`. There is no authentication/ownership system and no Hedera functionality; no Hedera transaction exists.
+
+### API/frontend execution result (2026-11-07)
+
+- Fixed the broken API module registration (`api/mod.rs` was missing `mod error;`/`mod models;` declarations) and Axum 0.8 route syntax (`:param` → `{param}`). `cargo check --locked --offline` then passed.
+- `cargo test --locked --offline --manifest-path core-engine/Cargo.toml`: 45 tests, 0 failed (34 unit + 4 API + 7 engine integration). The API suite covers health, frontend serving, missing/oversized/tampered multipart fields, full genuine-proof lifecycle (submit → metadata → artifacts → verifications → reverify → restart persistence), verifier timeout, and invalid IDs.
+- `cargo fmt --check` and `cargo clippy --locked --offline --all-targets -- -D warnings` pass (clippy component was added to the workspace toolchain).
+- Live smoke test: `fixture` on 127.0.0.1:4443, `serve` on 127.0.0.1:3000, genuine `prove` package submitted via `curl -F` multipart → HTTP 201 `stored`; duplicate → 200 `already_present`; metadata/verifications/artifacts (ETag + `x-artifact-sha256`) → 200; `reverify` → 200 `reverified`; tampered presentation → 422 `VERIFICATION_REJECTED`; invalid evidence ID → 400; unknown artifact type → 400; `GET /` serves the console HTML.
+- New files: `core-engine/frontend/index.html` (embedded via `include_str!`, no build step, no new dependencies). Modified: `core-engine/src/api/mod.rs` (submodule declarations, `{param}` routes, frontend routes), `core-engine/src/storage.rs` (clippy lint), `core-engine/tests/api.rs` (frontend test), `README.md`, `implementation_plan.md`, `docs/TECHNICAL_FEASIBILITY.md`.
+- Security notes: loopback default preserved with non-loopback warning; multipart field size caps (16 MiB/16 MiB/64 KiB); verifier concurrency semaphore; verifier subprocess timeout (≤120 s); strict evidence-ID and artifact-type validation; storage path/symlink checks unchanged; error responses do not leak internals. No CORS layer is configured because the frontend is same-origin; the API is not intended for cross-origin browser clients.
 
 ### Environment and commands
 
