@@ -32,6 +32,17 @@ import {
   TopicMessageSubmitTransaction,
 } from "@hashgraph/sdk";
 
+// Load hedera/.env if present (real env vars always take precedence).
+// Node >= 20.12 supports process.loadEnvFile; it does not override existing vars.
+try {
+  const envPath = new URL("../.env", import.meta.url);
+  if (process.loadEnvFile) {
+    process.loadEnvFile(envPath);
+  }
+} catch {
+  // No .env file or unreadable — env vars may still be set externally.
+}
+
 const NETWORK = (process.env.HEDERA_NETWORK || "testnet").toLowerCase();
 const ACCOUNT_ID = process.env.HEDERA_ACCOUNT_ID || "";
 const PRIVATE_KEY = process.env.HEDERA_PRIVATE_KEY || "";

@@ -16,7 +16,7 @@
 //!   outcomes: if Hedera is unconfigured or fails, evidence remains stored
 //!   and verifiable.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -55,6 +55,40 @@ pub struct HederaConfig {
     pub sidecar_path: PathBuf,
 }
 
+/// Load `hedera/.env` (next to the sidecar's parent dir) into the process
+/// environment for any HEDERA_* var not already set. Real environment
+/// variables always win. No external crate — tiny KEY=VALUE parser.
+fn load_env_file(sidecar_path: &Path) {
+    // sidecar_path = <repo>/hedera/src/cli.mjs → .env is ../../.env
+    let env_path = sidecar_path
+        .parent() // src/
+        .and_then(|p| p.parent()) // hedera/
+        .map(|d| d.join(".env"));
+    let Some(path) = env_path else { return };
+    let Ok(contents) = std::fs::read_to_string(&path) else { return };
+    for line in contents.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else { continue };
+        let key = key.trim();
+        if !key.starts_with("HEDERA_") {
+            continue;
+        }
+        let mut value = value.trim().to_string();
+        if (value.starts_with('"') && value.ends_with('"') && value.len() >= 2)
+            || (value.starts_with('\'') && value.ends_with('\'') && value.len() >= 2)
+        {
+            value = value[1..value.len() - 1].to_string();
+        }
+        // Never override a variable already present in the real environment.
+        if std::env::var_os(key).is_none() {
+            std::env::set_var(key, &value);
+        }
+    }
+}
+
 impl HederaConfig {
     pub fn from_env() -> Self {
         let exe_dir = std::env::current_exe()
@@ -75,6 +109,9 @@ impl HederaConfig {
             .into_iter()
             .find(|p| p.is_file())
             .unwrap_or_else(|| PathBuf::from("hedera").join("src").join("cli.mjs"));
+
+        // Load hedera/.env for any HEDERA_* var not already in the environment.
+        load_env_file(&sidecar_path);
 
         let network = std::env::var("HEDERA_NETWORK")
             .unwrap_or_else(|_| "testnet".to_string())
