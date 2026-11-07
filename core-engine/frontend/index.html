@@ -341,7 +341,7 @@ tr:last-child td{border-bottom:none}
   display:flex;gap:var(--s2);justify-content:center;
 }
 .dropzone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:1}
-.dz-label{font-size:var(--fs-meta);font-weight:700;color:var(--muted);display:block;margin-bottom:var(--s2);text-transform:uppercase;letter-spacing:.07em}
+.field label.dz-label{font-size:var(--fs-meta);font-weight:700;color:var(--muted);display:block;margin-bottom:var(--s2);text-transform:uppercase;letter-spacing:.07em}
 
 /* ================= Fields ================= */
 .field{margin-bottom:var(--s4)}
@@ -839,7 +839,7 @@ input.invalid{border-color:var(--err)}
               <tr><td><span class="badge neutral">POST</span></td><td class="mono-id">/api/v1/evidence/{id}/reverify</td><td>Re-run verifier on stored artifacts</td></tr>
             </tbody>
           </table></div>
-          <p style="margin-top:var(--s4)">Error responses use <code>{"error":{"code","message"}}</code> with codes: <code>INVALID_PACKAGE</code>, <code>INVALID_EVIDENCE_ID</code>, <code>INVALID_ARTIFACT_TYPE</code>, <code>PAYLOAD_TOO_LARGE</code>, <code>MALFORMED_MULTIPART</code>, <code>EVIDENCE_NOT_FOUND</code>, <code>EVIDENCE_CONFLICT</code>, <code>VERIFICATION_REJECTED</code>, <code>INVALID_VERIFIER_OUTPUT</code>, <code>VERIFIER_TIMEOUT</code>, <code>CONCURRENCY_LIMIT_REACHED</code>, <code>INTERNAL_ERROR</code>, <code>STORAGE_UNAVAILABLE</code>.</p>
+          <p>Error responses use <code>{"error":{"code","message"}}</code> with codes: <code>INVALID_PACKAGE</code>, <code>INVALID_EVIDENCE_ID</code>, <code>INVALID_ARTIFACT_TYPE</code>, <code>PAYLOAD_TOO_LARGE</code>, <code>MALFORMED_MULTIPART</code>, <code>EVIDENCE_NOT_FOUND</code>, <code>EVIDENCE_CONFLICT</code>, <code>VERIFICATION_REJECTED</code>, <code>INVALID_VERIFIER_OUTPUT</code>, <code>VERIFIER_TIMEOUT</code>, <code>CONCURRENCY_LIMIT_REACHED</code>, <code>INTERNAL_ERROR</code>, <code>STORAGE_UNAVAILABLE</code>.</p>
         </div>
 
         <div class="card doc-section">
@@ -854,7 +854,7 @@ input.invalid{border-color:var(--err)}
               <tr><td class="mono-id">traceseal-core serve --bind 127.0.0.1:3000 --storage-dir store</td><td>Start the HTTP API + this console</td></tr>
             </tbody>
           </table></div>
-          <p style="margin-top:var(--s4)">Requires <code>TRACESEAL_TEST_ATTESTOR_KEY</code> (64 hex chars) for the local test attestor — demo key material only, not production trust.</p>
+          <p>Requires <code>TRACESEAL_TEST_ATTESTOR_KEY</code> (64 hex chars) for the local test attestor — demo key material only, not production trust.</p>
         </div>
 
         <div class="card doc-section">
@@ -1061,7 +1061,9 @@ function renderRecent() {
   box.innerHTML = "";
   if (!list.length) {
     const empty = el("div", "empty-block");
-    empty.appendChild(el("div", "icon", "🗂"));
+    const iconWrap = el("div", "icon");
+    iconWrap.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="34" height="34" style="display:block;margin:0 auto"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg>';
+    empty.appendChild(iconWrap);
     empty.appendChild(el("p", null, "No evidence viewed in this browser yet."));
     empty.appendChild(el("p", "hint", "IDs you look up or submit are remembered locally."));
     box.appendChild(empty);
