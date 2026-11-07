@@ -18,7 +18,8 @@ use crate::{
     },
     engine::{verify_and_package, EvidencePackage},
     evidence::{SCHEMA_VERSION, TLSNOTARY_VERSION, TRUST_POLICY_ID},
-    storage::StoreDisposition,
+    hedera,
+    storage::{HederaEventRow, HederaReceiptRow, StoreDisposition},
 };
 
 const MAX_ATTESTATION_BYTES: usize = 16 * 1024 * 1024;
@@ -106,6 +107,17 @@ pub async fn submit_evidence(
 
     let verified = verify_and_package(package, state.verifier_timeout).await?;
     let receipt = state.store.store(&verified)?;
+
+    // Hedera anchoring runs after local storage succeeds. It is fully
+    // idempotent and never blocks or fails the submission response.
+    if receipt.disposition == StoreDisposition::Stored {
+        let store = state.store.clone();
+        let config = state.hedera.clone();
+        let evidence_id = receipt.evidence_id.clone();
+        tokio::spawn(async move {
+            let _ = hedera::anchor_evidence(&store, &config, &evidence_id).await;
+        });
+    }
 
     let status = match receipt.disposition {
         StoreDisposition::Stored => StatusCode::CREATED,
@@ -202,11 +214,159 @@ pub async fn reverify_evidence(
     let report = verified.original_verification().clone();
     state.store.record_reverification(verified)?;
 
+    // Anchor the re-verification event on Hedera (no new NFT is minted).
+    {
+        let store = state.store.clone();
+        let config = state.hedera.clone();
+        let eid = evidence_id.clone();
+        tokio::spawn(async move {
+            let _ = hedera::anchor_reverification(&store, &config, &eid).await;
+        });
+    }
+
     Ok(Json(ReverificationResponse {
         evidence_id,
         status: "reverified",
         verification: report,
     }))
+}
+
+/* ------------------------- Hedera endpoints ------------------------- */
+
+fn hedera_event_json(e: &HederaEventRow) -> serde_json::Value {
+    serde_json::json!({
+        "event_id": e.event_id,
+        "event_type": e.event_type,
+        "dedupe_key": e.dedupe_key,
+        "status": e.status,
+        "topic_id": e.topic_id,
+        "sequence_number": e.sequence_number,
+        "consensus_timestamp": e.consensus_timestamp,
+        "transaction_id": e.transaction_id,
+        "attempts": e.attempts,
+        "last_error": e.last_error,
+        "created_at": e.created_at,
+        "updated_at": e.updated_at,
+        "payload": serde_json::from_str::<serde_json::Value>(&e.payload_json).ok(),
+    })
+}
+
+fn hedera_receipt_json(r: &HederaReceiptRow) -> serde_json::Value {
+    serde_json::json!({
+        "evidence_id": r.evidence_id,
+        "commitment": r.commitment,
+        "commitment_hex": r.commitment_hex,
+        "token_id": r.token_id,
+        "serial_number": r.serial_number,
+        "mint_transaction_id": r.mint_transaction_id,
+        "mint_consensus_timestamp": r.mint_consensus_timestamp,
+        "status": r.status,
+        "last_error": r.last_error,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+    })
+}
+
+/// GET /api/v1/hedera/status — configuration + live account status.
+/// Never exposes private key material.
+pub async fn hedera_status(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let config = &state.hedera;
+    let missing = config.missing();
+    let mut body = serde_json::json!({
+        "configured": config.is_fully_configured(),
+        "credentials_present": config.credentials_present(),
+        "network": config.network,
+        "mirror_node_url": config.mirror_node_url,
+        "account_id": config.account_id,
+        "topic_id": config.topic_id,
+        "nft_token_id": config.nft_token_id,
+        "nft_name": "TraceSeal Verified Evidence",
+        "nft_symbol": "TSVR",
+        "missing": missing,
+        "sidecar_available": hedera::sidecar_exists(config),
+        "hashscan_base": hedera::hashscan_base(&config.network),
+    });
+    // Live balance check via sidecar (best-effort).
+    if config.credentials_present() {
+        match hedera::run_sidecar(config, &["status".to_string()]).await {
+            Ok(res) => {
+                body["balance_tinybars"] = res.get("balance_tinybars").cloned().unwrap_or(serde_json::Value::Null);
+                body["account_error"] = res.get("account_error").cloned().unwrap_or(serde_json::Value::Null);
+            }
+            Err(e) => {
+                body["account_error"] = serde_json::Value::String(e.to_string());
+            }
+        }
+    }
+    Ok(Json(body))
+}
+
+/// GET /api/v1/evidence/{id}/blockchain — local Hedera records + optional
+/// mirror verification (?verify=1 triggers live Mirror Node checks).
+pub async fn evidence_blockchain(
+    State(state): State<Arc<AppState>>,
+    Path(evidence_id): Path<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    validate_evidence_id(&evidence_id)?;
+    // Ensure the evidence exists.
+    state.store.get_metadata(&evidence_id)?;
+
+    let events: Vec<_> = state
+        .store
+        .hedera_events_for(&evidence_id)?
+        .iter()
+        .map(hedera_event_json)
+        .collect();
+    let receipt = state
+        .store
+        .hedera_receipt_for(&evidence_id)?
+        .map(|r| hedera_receipt_json(&r));
+
+    let mut body = serde_json::json!({
+        "evidence_id": evidence_id,
+        "network": state.hedera.network,
+        "topic_id": state.hedera.topic_id,
+        "nft_token_id": state.hedera.nft_token_id,
+        "hashscan_base": hedera::hashscan_base(&state.hedera.network),
+        "configured": state.hedera.is_fully_configured(),
+        "audit_events": events,
+        "nft_receipt": receipt,
+    });
+
+    if params.get("verify").map(|v| v == "1" || v == "true").unwrap_or(false) {
+        match hedera::mirror_verify_evidence(&state.store, &state.hedera, &evidence_id).await {
+            Ok(report) => body["mirror_verification"] = report,
+            Err(e) => {
+                body["mirror_verification"] = serde_json::json!({
+                    "error": e.to_string(),
+                });
+            }
+        }
+    }
+    Ok(Json(body))
+}
+
+/// POST /api/v1/evidence/{id}/anchor — enqueue (if needed) and drain the
+/// Hedera outbox for this evidence. Idempotent; safe to call repeatedly.
+pub async fn anchor_evidence_now(
+    State(state): State<Arc<AppState>>,
+    Path(evidence_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    validate_evidence_id(&evidence_id)?;
+    state.store.get_metadata(&evidence_id)?;
+    let report = hedera::anchor_evidence(&state.store, &state.hedera, &evidence_id)
+        .await
+        .map_err(|e| ApiError::Internal(format!("hedera anchoring failed: {e}")))?;
+    Ok(Json(serde_json::json!({
+        "evidence_id": evidence_id,
+        "published": report.published,
+        "minted": report.minted,
+        "failed": report.failed,
+        "skipped_unconfigured": report.skipped_unconfigured,
+    })))
 }
 
 async fn read_field_bytes(

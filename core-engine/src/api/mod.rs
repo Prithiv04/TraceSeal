@@ -14,6 +14,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::hedera::HederaConfig;
 use crate::storage::EvidenceStore;
 
 const FRONTEND_HTML: &str = include_str!("../../frontend/index.html");
@@ -31,6 +32,8 @@ pub struct AppState {
     pub verifier_semaphore: Arc<tokio::sync::Semaphore>,
     /// Timeout for verifier subprocesses.
     pub verifier_timeout: Duration,
+    /// Hedera anchoring configuration (env-derived, no secrets held).
+    pub hedera: HederaConfig,
 }
 
 impl AppState {
@@ -40,6 +43,7 @@ impl AppState {
             store: Arc::new(store),
             verifier_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             verifier_timeout: Duration::from_secs(30),
+            hedera: HederaConfig::from_env(),
         }
     }
 
@@ -49,6 +53,7 @@ impl AppState {
             store: Arc::new(store),
             verifier_semaphore: Arc::new(tokio::sync::Semaphore::new(max_concurrency)),
             verifier_timeout: timeout,
+            hedera: HederaConfig::from_env(),
         }
     }
 }
@@ -75,6 +80,15 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route(
             "/api/v1/evidence/{evidence_id}/reverify",
             post(handlers::reverify_evidence),
+        )
+        .route("/api/v1/hedera/status", get(handlers::hedera_status))
+        .route(
+            "/api/v1/evidence/{evidence_id}/blockchain",
+            get(handlers::evidence_blockchain),
+        )
+        .route(
+            "/api/v1/evidence/{evidence_id}/anchor",
+            post(handlers::anchor_evidence_now),
         )
         .with_state(state)
 }

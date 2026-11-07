@@ -17,13 +17,52 @@ use crate::{
     EvidenceReport,
 };
 
-const DATABASE_VERSION: i64 = 1;
+const DATABASE_VERSION: i64 = 2;
 const MAX_ARTIFACT_SIZES: [u64; 3] = [16 * 1024 * 1024, 16 * 1024 * 1024, 64 * 1024];
 const ARTIFACT_TYPES: [(&str, &str); 3] = [
     ("attestation", "attestation.tlsn"),
     ("presentation", "presentation.tlsn"),
     ("request_manifest", "request.json"),
 ];
+
+/// Schema v2: Hedera outbox + NFT receipt tables.
+const HEDERA_V2_SCHEMA: &str = "
+    CREATE TABLE hedera_events (
+        event_id INTEGER PRIMARY KEY,
+        evidence_id TEXT NOT NULL REFERENCES evidence_records(evidence_id),
+        event_type TEXT NOT NULL CHECK (
+            event_type IN ('EVIDENCE_VERIFIED', 'RECEIPT_MINTED', 'EVIDENCE_REVERIFIED')
+        ),
+        dedupe_key TEXT NOT NULL UNIQUE,
+        payload_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (
+            status IN ('PENDING', 'SUBMITTED', 'CONFIRMED', 'FAILED')
+        ) DEFAULT 'PENDING',
+        topic_id TEXT,
+        sequence_number TEXT,
+        consensus_timestamp TEXT,
+        transaction_id TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE INDEX hedera_events_status ON hedera_events(status);
+    CREATE INDEX hedera_events_evidence ON hedera_events(evidence_id);
+    CREATE TABLE hedera_receipts (
+        evidence_id TEXT PRIMARY KEY REFERENCES evidence_records(evidence_id),
+        commitment TEXT NOT NULL,
+        commitment_hex TEXT NOT NULL UNIQUE,
+        token_id TEXT NOT NULL,
+        serial_number TEXT,
+        mint_transaction_id TEXT,
+        mint_consensus_timestamp TEXT,
+        status TEXT NOT NULL CHECK (status IN ('PENDING', 'MINTED', 'FAILED')),
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    PRAGMA user_version = 2;";
 
 #[derive(Debug, Error)]
 pub enum StorageError {
@@ -90,6 +129,41 @@ pub struct StoredArtifacts {
 pub struct StoredEvidence {
     pub metadata: StoredMetadata,
     pub artifacts: StoredArtifacts,
+}
+
+/// One row of the `hedera_events` outbox table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HederaEventRow {
+    pub event_id: i64,
+    pub evidence_id: String,
+    pub event_type: String,
+    pub dedupe_key: String,
+    pub payload_json: String,
+    pub status: String,
+    pub topic_id: Option<String>,
+    pub sequence_number: Option<String>,
+    pub consensus_timestamp: Option<String>,
+    pub transaction_id: Option<String>,
+    pub attempts: i64,
+    pub last_error: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// One row of the `hedera_receipts` table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HederaReceiptRow {
+    pub evidence_id: String,
+    pub commitment: String,
+    pub commitment_hex: String,
+    pub token_id: String,
+    pub serial_number: Option<String>,
+    pub mint_transaction_id: Option<String>,
+    pub mint_consensus_timestamp: Option<String>,
+    pub status: String,
+    pub last_error: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone)]
@@ -365,6 +439,255 @@ impl EvidenceStore {
         Ok(())
     }
 
+    /* ---------------- Hedera outbox + receipts (schema v2) ---------------- */
+
+    /// Enqueue a Hedera audit event. Idempotent via UNIQUE(dedupe_key):
+    /// returns the existing event_id if the key was already enqueued.
+    pub fn enqueue_hedera_event(
+        &self,
+        evidence_id: &str,
+        event_type: &str,
+        dedupe_key: &str,
+        payload_json: &str,
+    ) -> Result<i64, StorageError> {
+        validate_evidence_id(evidence_id)?;
+        let mut connection = self.connect()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let now = now();
+        transaction.execute(
+            "INSERT INTO hedera_events (
+                evidence_id, event_type, dedupe_key, payload_json, status, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, 'PENDING', ?5, ?5)
+            ON CONFLICT(dedupe_key) DO NOTHING",
+            params![evidence_id, event_type, dedupe_key, payload_json, now],
+        )?;
+        let event_id: i64 = transaction.query_row(
+            "SELECT event_id FROM hedera_events WHERE dedupe_key = ?1",
+            [dedupe_key],
+            |row| row.get(0),
+        )?;
+        transaction.commit()?;
+        Ok(event_id)
+    }
+
+    /// Fetch a single outbox event by dedupe key.
+    pub fn get_hedera_event(
+        &self,
+        dedupe_key: &str,
+    ) -> Result<Option<HederaEventRow>, StorageError> {
+        let connection = self.connect()?;
+        connection
+            .query_row(
+                "SELECT event_id, evidence_id, event_type, dedupe_key, payload_json, status,
+                        topic_id, sequence_number, consensus_timestamp, transaction_id,
+                        attempts, last_error, created_at, updated_at
+                 FROM hedera_events WHERE dedupe_key = ?1",
+                [dedupe_key],
+                hedera_event_from_row,
+            )
+            .optional()
+            .map_err(StorageError::Database)
+    }
+
+    /// List outbox events for one evidence record, oldest first.
+    pub fn hedera_events_for(
+        &self,
+        evidence_id: &str,
+    ) -> Result<Vec<HederaEventRow>, StorageError> {
+        validate_evidence_id(evidence_id)?;
+        let connection = self.connect()?;
+        let mut stmt = connection.prepare(
+            "SELECT event_id, evidence_id, event_type, dedupe_key, payload_json, status,
+                    topic_id, sequence_number, consensus_timestamp, transaction_id,
+                    attempts, last_error, created_at, updated_at
+             FROM hedera_events WHERE evidence_id = ?1 ORDER BY event_id",
+        )?;
+        let rows = stmt.query_map([evidence_id], hedera_event_from_row)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    /// List PENDING/FAILED events eligible for retry, oldest first.
+    pub fn pending_hedera_events(&self, limit: usize) -> Result<Vec<HederaEventRow>, StorageError> {
+        let connection = self.connect()?;
+        let mut stmt = connection.prepare(
+            "SELECT event_id, evidence_id, event_type, dedupe_key, payload_json, status,
+                    topic_id, sequence_number, consensus_timestamp, transaction_id,
+                    attempts, last_error, created_at, updated_at
+             FROM hedera_events
+             WHERE status IN ('PENDING', 'FAILED')
+             ORDER BY event_id LIMIT ?1",
+        )?;
+        let rows = stmt.query_map([limit as i64], hedera_event_from_row)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    /// Record the outcome of an HCS publish attempt.
+    pub fn mark_hedera_event_submitted(
+        &self,
+        dedupe_key: &str,
+        topic_id: &str,
+        sequence_number: &str,
+        consensus_timestamp: &str,
+        transaction_id: &str,
+    ) -> Result<(), StorageError> {
+        let connection = self.connect()?;
+        connection.execute(
+            "UPDATE hedera_events SET
+                status = 'CONFIRMED', topic_id = ?2, sequence_number = ?3,
+                consensus_timestamp = ?4, transaction_id = ?5,
+                attempts = attempts + 1, last_error = NULL, updated_at = ?6
+             WHERE dedupe_key = ?1",
+            params![
+                dedupe_key,
+                topic_id,
+                sequence_number,
+                consensus_timestamp,
+                transaction_id,
+                now()
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Record a failed attempt; status stays retryable (FAILED).
+    pub fn mark_hedera_event_failed(
+        &self,
+        dedupe_key: &str,
+        error: &str,
+    ) -> Result<(), StorageError> {
+        let connection = self.connect()?;
+        connection.execute(
+            "UPDATE hedera_events SET
+                status = 'FAILED', attempts = attempts + 1, last_error = ?2, updated_at = ?3
+             WHERE dedupe_key = ?1",
+            params![dedupe_key, error, now()],
+        )?;
+        Ok(())
+    }
+
+    /// Reserve an NFT receipt slot for a commitment. Idempotent: returns
+    /// (created, serial_status). UNIQUE(commitment_hex) prevents double mint.
+    pub fn reserve_hedera_receipt(
+        &self,
+        evidence_id: &str,
+        commitment: &str,
+        commitment_hex: &str,
+        token_id: &str,
+    ) -> Result<bool, StorageError> {
+        validate_evidence_id(evidence_id)?;
+        let mut connection = self.connect()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let now = now();
+        let inserted = transaction.execute(
+            "INSERT INTO hedera_receipts (
+                evidence_id, commitment, commitment_hex, token_id, status, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, 'PENDING', ?5, ?5)
+            ON CONFLICT(commitment_hex) DO NOTHING",
+            params![evidence_id, commitment, commitment_hex, token_id, now],
+        )?;
+        transaction.commit()?;
+        Ok(inserted > 0)
+    }
+
+    /// Mark an NFT receipt as minted with real transaction references.
+    pub fn mark_hedera_receipt_minted(
+        &self,
+        evidence_id: &str,
+        serial_number: &str,
+        mint_transaction_id: &str,
+        mint_consensus_timestamp: &str,
+    ) -> Result<(), StorageError> {
+        let connection = self.connect()?;
+        connection.execute(
+            "UPDATE hedera_receipts SET
+                status = 'MINTED', serial_number = ?2, mint_transaction_id = ?3,
+                mint_consensus_timestamp = ?4, last_error = NULL, updated_at = ?5
+             WHERE evidence_id = ?1",
+            params![evidence_id, serial_number, mint_transaction_id, mint_consensus_timestamp, now()],
+        )?;
+        Ok(())
+    }
+
+    /// Mark an NFT receipt attempt as failed (retryable).
+    pub fn mark_hedera_receipt_failed(
+        &self,
+        evidence_id: &str,
+        error: &str,
+    ) -> Result<(), StorageError> {
+        let connection = self.connect()?;
+        connection.execute(
+            "UPDATE hedera_receipts SET status = 'FAILED', last_error = ?2, updated_at = ?3
+             WHERE evidence_id = ?1",
+            params![evidence_id, error, now()],
+        )?;
+        Ok(())
+    }
+
+    /// Fetch the NFT receipt for an evidence record, if any.
+    pub fn hedera_receipt_for(
+        &self,
+        evidence_id: &str,
+    ) -> Result<Option<HederaReceiptRow>, StorageError> {
+        validate_evidence_id(evidence_id)?;
+        let connection = self.connect()?;
+        connection
+            .query_row(
+                "SELECT evidence_id, commitment, commitment_hex, token_id, serial_number,
+                        mint_transaction_id, mint_consensus_timestamp, status, last_error,
+                        created_at, updated_at
+                 FROM hedera_receipts WHERE evidence_id = ?1",
+                [evidence_id],
+                hedera_receipt_from_row,
+            )
+            .optional()
+            .map_err(StorageError::Database)
+    }
+
+    /// Fetch a receipt by commitment hex (used for dedupe across evidence IDs).
+    pub fn hedera_receipt_by_commitment(
+        &self,
+        commitment_hex: &str,
+    ) -> Result<Option<HederaReceiptRow>, StorageError> {
+        let connection = self.connect()?;
+        connection
+            .query_row(
+                "SELECT evidence_id, commitment, commitment_hex, token_id, serial_number,
+                        mint_transaction_id, mint_consensus_timestamp, status, last_error,
+                        created_at, updated_at
+                 FROM hedera_receipts WHERE commitment_hex = ?1",
+                [commitment_hex],
+                hedera_receipt_from_row,
+            )
+            .optional()
+            .map_err(StorageError::Database)
+    }
+
+    /// Receipts still needing a mint attempt (PENDING or FAILED).
+    pub fn pending_hedera_receipts(&self) -> Result<Vec<HederaReceiptRow>, StorageError> {
+        let connection = self.connect()?;
+        let mut stmt = connection.prepare(
+            "SELECT evidence_id, commitment, commitment_hex, token_id, serial_number,
+                    mint_transaction_id, mint_consensus_timestamp, status, last_error,
+                    created_at, updated_at
+             FROM hedera_receipts WHERE status IN ('PENDING', 'FAILED')
+             ORDER BY created_at",
+        )?;
+        let rows = stmt.query_map([], hedera_receipt_from_row)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
     fn initialize_database(&self) -> Result<(), StorageError> {
         let mut connection = self.connect()?;
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -430,6 +753,20 @@ impl EvidenceStore {
                     PRAGMA user_version = 1;",
                 )?;
             } else if locked_version != DATABASE_VERSION {
+                return Err(StorageError::UnsupportedSchemaVersion);
+            }
+            transaction.commit()?;
+        }
+        // Migrate v1 -> v2: Hedera outbox + receipt tables.
+        let current: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if current == 1 {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let locked: i64 =
+                transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+            if locked == 1 {
+                transaction.execute_batch(HEDERA_V2_SCHEMA)?;
+            } else if locked != DATABASE_VERSION {
                 return Err(StorageError::UnsupportedSchemaVersion);
             }
             transaction.commit()?;
@@ -621,6 +958,41 @@ fn insert_artifact_rows(
         )?;
     }
     Ok(())
+}
+
+fn hedera_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<HederaEventRow> {
+    Ok(HederaEventRow {
+        event_id: row.get(0)?,
+        evidence_id: row.get(1)?,
+        event_type: row.get(2)?,
+        dedupe_key: row.get(3)?,
+        payload_json: row.get(4)?,
+        status: row.get(5)?,
+        topic_id: row.get(6)?,
+        sequence_number: row.get(7)?,
+        consensus_timestamp: row.get(8)?,
+        transaction_id: row.get(9)?,
+        attempts: row.get(10)?,
+        last_error: row.get(11)?,
+        created_at: row.get(12)?,
+        updated_at: row.get(13)?,
+    })
+}
+
+fn hedera_receipt_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<HederaReceiptRow> {
+    Ok(HederaReceiptRow {
+        evidence_id: row.get(0)?,
+        commitment: row.get(1)?,
+        commitment_hex: row.get(2)?,
+        token_id: row.get(3)?,
+        serial_number: row.get(4)?,
+        mint_transaction_id: row.get(5)?,
+        mint_consensus_timestamp: row.get(6)?,
+        status: row.get(7)?,
+        last_error: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
+    })
 }
 
 fn load_metadata(

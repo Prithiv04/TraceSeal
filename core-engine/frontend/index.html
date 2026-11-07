@@ -678,16 +678,8 @@ input.invalid{border-color:var(--err)}
         </div>
 
         <div class="card">
-          <h2><svg class="h-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v3.5l2.5 1.5"/></svg>Network status</h2>
-          <div class="net-status">
-            <div class="ns-ico">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z"/></svg>
-            </div>
-            <div>
-              <div class="ns-title">Hedera anchoring — not connected</div>
-              <div class="ns-desc">External timestamping is planned but not implemented. No ledger transactions, block heights, or network data are available yet.</div>
-            </div>
-          </div>
+          <h2><svg class="h-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v3.5l2.5 1.5"/></svg>Hedera anchoring</h2>
+          <div id="hederaStatus"><div class="skeleton"></div><div class="skeleton" style="width:70%"></div></div>
         </div>
       </section>
 
@@ -844,6 +836,7 @@ input.invalid{border-color:var(--err)}
             <a href="#doc-09"><span class="n">09</span>Trust model</a>
             <a href="#doc-10"><span class="n">10</span>Limitations</a>
             <a href="#doc-11"><span class="n">11</span>Future: Hedera integration</a>
+            <a href="#doc-12"><span class="n">12</span>Hedera anchoring</a>
           </div>
         </div>
 
@@ -949,8 +942,19 @@ input.invalid{border-color:var(--err)}
         </div>
 
         <div class="card doc-section" id="doc-11">
-          <div class="doc-head"><span class="num">11</span><h2>Future: Hedera integration</h2></div>
-          <p>Planned: anchor the evidence commitment to Hedera HCS so the commitment is timestamped by a public ledger. Requires HBAR-funded operator credentials, a topic ID, and mirror-node lookup for comparison. <strong>Not implemented</strong> — no testnet transactions exist yet.</p>
+          <div class="doc-head"><span class="num">11</span><h2>Roadmap</h2></div>
+          <p>Planned next: Hedera HCS anchoring of evidence commitments for public, independently inspectable audit trails. See section 12 for the current integration status.</p>
+        </div>
+
+        <div class="card doc-section" id="doc-12">
+          <div class="doc-head"><span class="num">12</span><h2>Hedera anchoring</h2></div>
+          <p>TRACESEAL can anchor verified evidence to Hedera testnet via a Node.js sidecar using the official <code>@hashgraph/sdk</code>. Three services are used:</p>
+          <ul>
+            <li><strong>HCS</strong> — an audit topic receives <code>EVIDENCE_VERIFIED</code>, <code>RECEIPT_MINTED</code>, and <code>EVIDENCE_REVERIFIED</code> messages containing only the evidence ID, commitment, and metadata — never proof files or disclosed data.</li>
+            <li><strong>HTS</strong> — the <code>TSVR</code> NFT collection ("TraceSeal Verified Evidence") mints one receipt NFT per unique commitment; the 32-byte SHA-256 commitment is stored as NFT metadata.</li>
+            <li><strong>Mirror Node</strong> — <code>https://testnet.mirrornode.hedera.com</code> is queried to independently confirm on-chain records and compare commitments.</li>
+          </ul>
+          <p>Anchoring is asynchronous and idempotent: operations are queued in a SQLite outbox before submission, deduplicated by key, and retried on failure. Local TLSNotary verification never depends on Hedera availability. Configure via <code>HEDERA_NETWORK</code>, <code>HEDERA_ACCOUNT_ID</code>, <code>HEDERA_PRIVATE_KEY</code>, <code>HEDERA_TOPIC_ID</code>, <code>HEDERA_NFT_TOKEN_ID</code>, and <code>HEDERA_MIRROR_NODE_URL</code> — see <code>hedera/.env.example</code>.</p>
         </div>
       </section>
 
@@ -1113,6 +1117,46 @@ function renderOverviewHealth(h) {
     grid.appendChild(s);
   }
   box.appendChild(grid);
+}
+
+/* ---------- Hedera status (overview) ---------- */
+async function refreshHederaStatus() {
+  const box = $("hederaStatus");
+  if (!box) return;
+  try {
+    const h = await api("/api/v1/hedera/status");
+    box.innerHTML = "";
+    const ns = el("div", "net-status");
+    ns.style.marginTop = "0";
+    const ico = el("div", "ns-ico");
+    ico.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z"/></svg>';
+    ns.appendChild(ico);
+    const txt = el("div");
+    const title = el("div", "ns-title");
+    if (h.configured) {
+      title.textContent = "Hedera " + h.network + " — configured";
+      title.style.color = "var(--ok)";
+    } else if (h.credentials_present) {
+      title.textContent = "Hedera " + h.network + " — partially configured";
+      title.style.color = "var(--warn)";
+    } else {
+      title.textContent = "Hedera anchoring — not configured";
+      title.style.color = "var(--muted)";
+    }
+    txt.appendChild(title);
+    const parts = [];
+    if (h.topic_id) parts.push("HCS topic " + h.topic_id);
+    if (h.nft_token_id) parts.push("NFT " + h.nft_token_id + " (" + (h.nft_symbol || "TSVR") + ")");
+    if (h.balance_tinybars != null) parts.push("balance " + h.balance_tinybars + " tinybars");
+    if (h.missing && h.missing.length) parts.push("missing: " + h.missing.join(", "));
+    if (!h.sidecar_available) parts.push("sidecar not found — run npm install in hedera/");
+    txt.appendChild(el("div", "ns-desc", parts.join(" · ") || "Set HEDERA_* env vars to enable anchoring."));
+    ns.appendChild(txt);
+    box.appendChild(ns);
+  } catch {
+    box.innerHTML = "";
+    box.appendChild(el("p", "empty-text", "Hedera status unavailable — backend unreachable."));
+  }
 }
 
 /* ---------- Recent evidence (localStorage) ---------- */
@@ -1416,7 +1460,7 @@ function renderEvidenceDetail(meta, history) {
   const tabs = el("div", "tabs");
   const panels = {};
   const tabDefs = [
-    ["overview", "Overview"], ["verification", "Verification"], ["metadata", "Metadata"], ["artifacts", "Artifacts"], ["history", "History"],
+    ["overview", "Overview"], ["verification", "Verification"], ["metadata", "Metadata"], ["artifacts", "Artifacts"], ["history", "History"], ["blockchain", "Blockchain"],
   ];
   const content = el("div");
   for (const [key, label] of tabDefs) {
@@ -1552,6 +1596,108 @@ function renderEvidenceDetail(meta, history) {
   } else {
     hp.appendChild(renderTimeline(rows));
   }
+  /* Blockchain */
+  const bc = panels.blockchain;
+  bc.appendChild(el("p", null, "On-chain audit trail and NFT receipt for this evidence, anchored to Hedera. Local records are shown first; use Mirror Node verification for independent confirmation."));
+  bc.style.color = "var(--muted)";
+  bc.style.fontSize = "var(--fs-small)";
+  const bcStatus = el("div", "status-line info");
+  bcStatus.setAttribute("role", "status");
+  const bcBody = el("div");
+  const bcRow = el("div", "btn-row tight");
+  const loadBc = el("button", "btn secondary sm", "Load blockchain records");
+  loadBc.type = "button";
+  const verifyBc = el("button", "btn ghost sm", "Verify via Mirror Node");
+  verifyBc.type = "button";
+  bcRow.appendChild(loadBc);
+  bcRow.appendChild(verifyBc);
+  bc.appendChild(bcRow);
+  bc.appendChild(bcStatus);
+  bc.appendChild(bcBody);
+
+  function renderBlockchain(data) {
+    bcBody.innerHTML = "";
+    const evs = data.audit_events || [];
+    bcBody.appendChild(el("h3", null, "HCS audit events"));
+    if (!evs.length) {
+      bcBody.appendChild(el("p", "empty-text", "No Hedera audit events recorded yet."));
+    } else {
+      const wrap = el("div", "table-wrap");
+      const t = el("table");
+      const th = el("thead"); const thr = el("tr");
+      for (const h of ["Event", "Status", "Topic", "Sequence", "Consensus time", "Transaction"]) thr.appendChild(el("th", null, h));
+      th.appendChild(thr); t.appendChild(th);
+      const tb = el("tbody");
+      for (const ev of evs) {
+        const tr = el("tr");
+        tr.appendChild(el("td", null, ev.event_type));
+        const tdS = el("td"); tdS.appendChild(badge(ev.status)); tr.appendChild(tdS);
+        tr.appendChild(el("td", null, ev.topic_id || "—"));
+        tr.appendChild(el("td", null, ev.sequence_number || "—"));
+        tr.appendChild(el("td", null, ev.consensus_timestamp ? fmtTime(ev.consensus_timestamp * 1) : "—"));
+        const tdT = el("td");
+        if (ev.transaction_id) {
+          const a = el("a", null, ev.transaction_id.slice(0, 20) + "…");
+          a.href = (data.hashscan_base || "https://hashscan.io/testnet") + "/transaction/" + ev.transaction_id;
+          a.target = "_blank"; a.rel = "noopener";
+          tdT.appendChild(a);
+        } else tdT.appendChild(el("span", null, "—"));
+        tr.appendChild(tdT);
+        tb.appendChild(tr);
+      }
+      t.appendChild(tb); wrap.appendChild(t); bcBody.appendChild(wrap);
+    }
+    const rc = data.nft_receipt;
+    bcBody.appendChild(el("h3", null, "NFT receipt (TSVR)"));
+    if (!rc) {
+      bcBody.appendChild(el("p", "empty-text", "No NFT receipt recorded."));
+    } else {
+      const dl = el("dl", "kv");
+      const rows = [
+        ["Token ID", rc.token_id], ["Serial", rc.serial_number || "—"],
+        ["Status", rc.status], ["Mint tx", rc.mint_transaction_id || "—"],
+        ["Mint consensus", rc.mint_consensus_timestamp ? fmtTime(rc.mint_consensus_timestamp * 1) : "—"],
+      ];
+      for (const [k, v] of rows) {
+        dl.appendChild(el("dt", null, k));
+        const dd = el("dd");
+        if (k === "Mint tx" && rc.mint_transaction_id) {
+          const a = el("a", null, rc.mint_transaction_id);
+          a.href = (data.hashscan_base || "https://hashscan.io/testnet") + "/transaction/" + rc.mint_transaction_id;
+          a.target = "_blank"; a.rel = "noopener";
+          dd.appendChild(a);
+        } else {
+          dd.appendChild(el("span", null, String(v)));
+        }
+        dl.appendChild(dd);
+      }
+      bcBody.appendChild(dl);
+    }
+    const mv = data.mirror_verification;
+    if (mv) {
+      bcBody.appendChild(el("h3", null, "Mirror Node verification"));
+      const pre = el("pre", "codeblock");
+      pre.style.whiteSpace = "pre-wrap";
+      pre.textContent = JSON.stringify(mv, null, 2).slice(0, 4000);
+      bcBody.appendChild(pre);
+    }
+  }
+
+  async function fetchBlockchain(verify) {
+    bcStatus.textContent = "";
+    bcStatus.className = "status-line info";
+    setStatus(bcStatus, verify ? "Querying Hedera Mirror Node…" : "Loading blockchain records…", "info");
+    try {
+      const data = await api("/api/v1/evidence/" + encodeURIComponent(meta.evidence_id) + "/blockchain" + (verify ? "?verify=1" : ""));
+      renderBlockchain(data);
+      setStatus(bcStatus, verify ? "Mirror verification complete." : "Loaded.", "ok");
+    } catch (e) {
+      setStatus(bcStatus, "Failed: " + e.message, "err");
+    }
+  }
+  loadBc.addEventListener("click", () => fetchBlockchain(false));
+  verifyBc.addEventListener("click", () => fetchBlockchain(true));
+
   const br = el("div", "btn-row");
   const rv = el("button", "btn secondary", "Re-verify proof");
   rv.type = "button";
@@ -1657,7 +1803,7 @@ function route() {
   $("crumbPage").textContent = TITLES[page];
   $("sidebar").classList.remove("open");
   $("scrim").classList.remove("show");
-  if (page === "overview") renderRecent();
+  if (page === "overview") { renderRecent(); refreshHederaStatus(); }
   if (page === "history") renderRemembered();
 }
 window.addEventListener("hashchange", route);

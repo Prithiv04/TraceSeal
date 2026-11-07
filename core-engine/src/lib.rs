@@ -2,6 +2,7 @@ pub mod api;
 pub mod engine;
 pub mod evidence;
 pub mod fixture;
+pub mod hedera;
 pub mod storage;
 
 use std::{

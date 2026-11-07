@@ -120,3 +120,21 @@ Artifact retrieval rejects missing, symlinked, path-escaping, oversized, or modi
 Filesystem safety is not race-proof against another local process that can modify the storage root concurrently. The implementation uses symlink metadata checks and canonical-path checks followed by ordinary path-based opens/reads; a privileged or same-user attacker able to swap filesystem entries between those steps may race a check. Restrictive root permissions/ACLs are part of the local threat boundary. Use an isolated storage directory not writable by untrusted local principals. Database/artifact hashes also do not authenticate both stores against an attacker able to rewrite them consistently.
 
 This is local storage only. There is no HTTP surface, authentication, user ownership, or authorization; callers must not treat a matching evidence ID as access authorization. The current demo attestor key remains public and insecure, and prover/notary operation is not independent. Local hashes and SQLite consistency checks are not authenticated against an attacker who can rewrite both the database and artifact tree. Do not treat this implementation as production-secure or independently attested.
+
+## Hedera anchoring (testnet)
+
+TRACESEAL can anchor verified evidence to Hedera testnet as a public, independently inspectable audit layer. TLSNotary remains the cryptographic verification engine; Hedera provides timestamping and receipts only.
+
+- **HCS** — audit topic receives `EVIDENCE_VERIFIED`, `RECEIPT_MINTED`, and `EVIDENCE_REVERIFIED` messages (evidence ID + commitment + metadata only; never proof files or disclosed data).
+- **HTS** — the `TSVR` NFT collection ("TraceSeal Verified Evidence", max supply 1000) mints one receipt NFT per unique commitment; the 32-byte SHA-256 commitment is the NFT metadata.
+- **Mirror Node** — `https://testnet.mirrornode.hedera.com` independently confirms on-chain records and compares commitments.
+
+Architecture: a Node.js sidecar (`hedera/`, official `@hashgraph/sdk`) performs all signing and transactions; the Rust backend shells out to it and keeps an idempotent SQLite outbox (`hedera_events`, `hedera_receipts`, schema v2). Anchoring is asynchronous, deduplicated, and fully optional — local verification works with no Hedera configuration.
+
+New API endpoints:
+
+- `GET /api/v1/hedera/status` — configuration + account status (no secrets)
+- `GET /api/v1/evidence/{id}/blockchain` — audit events + NFT receipt (`?verify=1` adds live Mirror Node checks)
+- `POST /api/v1/evidence/{id}/anchor` — enqueue + drain the outbox (idempotent)
+
+Setup: `cd hedera && npm install`, copy `.env.example` to `.env`, run `node src/cli.mjs setup-topic` and `setup-nft`, then set the `HEDERA_*` env vars before `traceseal-core serve`. See `hedera/README.md`.

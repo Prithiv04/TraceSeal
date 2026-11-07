@@ -159,3 +159,7 @@ vite.config.ts.timestamp-*
 .env
 .env.*
 !.env.example
+
+# Hedera sidecar
+hedera/node_modules/
+hedera/.env

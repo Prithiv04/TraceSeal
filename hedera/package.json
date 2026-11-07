@@ -1,0 +1,16 @@
+{
+  "name": "traceseal-hedera",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TraceSeal Hedera sidecar — HCS audit events, HTS NFT receipts, Mirror Node queries (official @hashgraph/sdk)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/cli.mjs"
+  },
+  "dependencies": {
+    "@hashgraph/sdk": "^2.81.0"
+  }
+}
