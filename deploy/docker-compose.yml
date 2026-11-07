@@ -1,0 +1,54 @@
+# TraceSeal — single-container deployment with persistent evidence storage.
+#
+# Usage:
+#   cp deploy/.env.example .env   # fill in real values (NEVER commit .env)
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#
+# Evidence SQLite DB + artifacts live in the named volume `traceseal-data`
+# mounted at /data — they survive container restarts and rebuilds.
+
+services:
+  traceseal:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: traceseal:latest
+    container_name: traceseal
+    restart: unless-stopped
+    env_file:
+      - ../.env            # HEDERA_* vars; see deploy/.env.example
+    environment:
+      # Non-secret runtime config (override in .env if needed).
+      TRACESEAL_MAX_CONCURRENCY: "4"
+      TRACESEAL_VERIFIER_TIMEOUT_SECONDS: "60"
+    ports:
+      # Loopback-only by default. For public exposure put a TLS reverse
+      # proxy (Caddy/nginx/Cloudflare Tunnel) in front and change to
+      # "127.0.0.1:3000:3000" -> proxy -> container, or expose directly
+      # only behind a firewall you control.
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - traceseal-data:/data
+    # Resource limits — adjust to host capacity.
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  traceseal-data:
+    name: traceseal-data

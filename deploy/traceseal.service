@@ -1,0 +1,52 @@
+# TraceSeal systemd unit — bare-metal / VM deployment (no Docker).
+#
+# Install:
+#   sudo cp deploy/traceseal.service /etc/systemd/system/traceseal.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now traceseal
+#
+# Prerequisites on the host:
+#   - Rust release binary at /opt/traceseal/bin/traceseal-core
+#   - Node.js >= 20.12 installed (sidecar uses official @hashgraph/sdk)
+#   - hedera/src/cli.mjs + hedera/node_modules at /opt/traceseal/hedera/
+#   - /opt/traceseal/.env with HEDERA_* vars (chmod 600, owner traceseal)
+#   - /var/lib/traceseal owned by traceseal (SQLite + artifacts)
+
+[Unit]
+Description=TraceSeal evidence verification API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=traceseal
+Group=traceseal
+WorkingDirectory=/opt/traceseal
+
+# Release binary; verifier re-exec uses the same executable.
+ExecStart=/opt/traceseal/bin/traceseal-core serve \
+    --bind 127.0.0.1:3000 \
+    --storage-dir /var/lib/traceseal/evidence-store \
+    --max-concurrency 4 \
+    --verifier-timeout-seconds 60
+
+# Hedera sidecar discovery + env loading.
+Environment=HEDERA_SIDECAR=/opt/traceseal/hedera/src/cli.mjs
+EnvironmentFile=/opt/traceseal/.env
+
+# Hardening.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/traceseal
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LimitNOFILE=65536
+
+Restart=on-failure
+RestartSec=5
+# Generous stop timeout: an in-flight TLSNotary verification may be running.
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

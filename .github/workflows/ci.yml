@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core-engine
+      - name: fmt
+        run: cargo fmt --check
+      - name: clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: test
+        run: cargo test --locked
+
+  hedera-sidecar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hedera
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: hedera/package-lock.json
+      - run: npm ci
+      - name: syntax check
+        run: node --check src/cli.mjs
+      - name: unit smoke (no credentials required)
+        run: node src/cli.mjs status
