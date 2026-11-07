@@ -59,14 +59,21 @@ pub struct HederaConfig {
 /// environment for any HEDERA_* var not already set. Real environment
 /// variables always win. No external crate — tiny KEY=VALUE parser.
 fn load_env_file(sidecar_path: &Path) {
-    // sidecar_path = <repo>/hedera/src/cli.mjs → .env is ../../.env
-    let env_path = sidecar_path
+    // sidecar_path = <repo>/hedera/src/cli.mjs
+    // Check hedera/.env first, then repo-root .env (../../.env from cli.mjs).
+    let hedera_dir = sidecar_path
         .parent() // src/
-        .and_then(|p| p.parent()) // hedera/
-        .map(|d| d.join(".env"));
-    let Some(path) = env_path else { return };
-    let Ok(contents) = std::fs::read_to_string(&path) else { return };
-    for line in contents.lines() {
+        .and_then(|p| p.parent()); // hedera/
+    let mut candidates = Vec::new();
+    if let Some(dir) = hedera_dir {
+        candidates.push(dir.join(".env"));
+        if let Some(root) = dir.parent() {
+            candidates.push(root.join(".env"));
+        }
+    }
+    for path in candidates {
+        let Ok(contents) = std::fs::read_to_string(&path) else { continue };
+        for line in contents.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
@@ -85,6 +92,7 @@ fn load_env_file(sidecar_path: &Path) {
         // Never override a variable already present in the real environment.
         if std::env::var_os(key).is_none() {
             std::env::set_var(key, &value);
+        }
         }
     }
 }

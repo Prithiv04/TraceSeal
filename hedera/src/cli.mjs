@@ -17,6 +17,7 @@
  *   mirror-tx                   Fetch transaction details by transaction id
  */
 import {
+  AccountBalanceQuery,
   AccountId,
   Client,
   Hbar,
@@ -32,16 +33,36 @@ import {
   TopicMessageSubmitTransaction,
 } from "@hashgraph/sdk";
 
-// Load hedera/.env if present (real env vars always take precedence).
-// Node >= 20.12 supports process.loadEnvFile; it does not override existing vars.
-try {
-  const envPath = new URL("../.env", import.meta.url);
-  if (process.loadEnvFile) {
-    process.loadEnvFile(envPath);
+// Load .env files if present: hedera/.env then repo-root .env.
+// Existing environment variables always win (manual parse, no override).
+function loadEnvFile(path) {
+  let text;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return;
   }
-} catch {
-  // No .env file or unreadable — env vars may still be set externally.
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq < 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    if (!key.startsWith("HEDERA_")) continue;
+    if (process.env[key] !== undefined) continue;
+    let value = trimmed.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
 }
+import { readFileSync } from "node:fs";
+loadEnvFile(new URL("../.env", import.meta.url)); // hedera/.env
+loadEnvFile(new URL("../../.env", import.meta.url)); // repo-root .env
 
 const NETWORK = (process.env.HEDERA_NETWORK || "testnet").toLowerCase();
 const ACCOUNT_ID = process.env.HEDERA_ACCOUNT_ID || "";
@@ -106,9 +127,9 @@ function makeClient() {
 }
 
 async function withClient(fn) {
-  const { client } = makeClient();
+  const { client, key } = makeClient();
   try {
-    return await fn(client);
+    return await fn(client, key);
   } finally {
     client.close();
   }
@@ -147,8 +168,10 @@ async function cmdStatus() {
   }
   try {
     const balance = await withClient(async (client) => {
-      const b = await client.getAccountBalance(AccountId.fromString(ACCOUNT_ID));
-      return b.toString();
+      const b = await new AccountBalanceQuery()
+        .setAccountId(AccountId.fromString(ACCOUNT_ID))
+        .execute(client);
+      return b.hbars.toString();
     });
     out({ ...base, balance_tinybars: balance });
   } catch (e) {
@@ -158,14 +181,15 @@ async function cmdStatus() {
 
 async function cmdSetupTopic() {
   requireConfig();
-  const result = await withClient(async (client) => {
+  const result = await withClient(async (client, key) => {
     const tx = await new TopicCreateTransaction()
       .setTopicMemo(HCS_MEMO_PREFIX)
-      .setAdminKey(client.operatorPublicKey)
-      .setSubmitKey(client.operatorPublicKey)
+      .setAdminKey(key.publicKey)
+      .setSubmitKey(key.publicKey)
       .freezeWith(client);
-    const signed = await tx.sign(client.operatorPrivateKey ?? client.operatorKey);
-    const receipt = await signed.execute(client);
+    const signed = await tx.sign(key);
+    const response = await signed.execute(client);
+    const receipt = await response.getReceipt(client);
     const topicId = receipt.topicId.toString();
     return { ...txMeta(signed, receipt), topic_id: topicId };
   });
@@ -174,32 +198,33 @@ async function cmdSetupTopic() {
 
 async function cmdSetupNft() {
   requireConfig();
-  const result = await withClient(async (client) => {
+  const result = await withClient(async (client, key) => {
     const tx = await new TokenCreateTransaction()
       .setTokenName(NFT_NAME)
       .setTokenSymbol(NFT_SYMBOL)
       .setTokenType(TokenType.NonFungibleUnique)
       .setDecimals(0)
       .setInitialSupply(0)
-      .setMaxSupply(NFT_MAX_SUPPLY)
       .setTreasuryAccountId(AccountId.fromString(ACCOUNT_ID))
-      .setAdminKey(client.operatorPublicKey)
-      .setSupplyKey(client.operatorPublicKey)
-      .setWipeKey(client.operatorPublicKey)
-      .setFreezeKey(client.operatorPublicKey)
-      .setKycKey(client.operatorPublicKey)
+      .setAdminKey(key.publicKey)
+      .setSupplyKey(key.publicKey)
+      .setWipeKey(key.publicKey)
+      .setFreezeKey(key.publicKey)
+      .setKycKey(key.publicKey)
       .setMetadata([Buffer.from(NFT_MEMO)])
       .freezeWith(client);
-    const signed = await tx.sign(client.operatorPrivateKey ?? client.operatorKey);
-    const receipt = await signed.execute(client);
+    const signed = await tx.sign(key);
+    const response = await signed.execute(client);
+    const receipt = await response.getReceipt(client);
     const tokenId = receipt.tokenId.toString();
     // Grant KYC to treasury so it can receive minted NFTs.
     const kycTx = await new TokenGrantKycTransaction()
       .setTokenId(tokenId)
       .setAccountId(AccountId.fromString(ACCOUNT_ID))
       .freezeWith(client);
-    const kycSigned = await kycTx.sign(client.operatorPrivateKey ?? client.operatorKey);
-    const kycReceipt = await kycSigned.execute(client);
+    const kycSigned = await kycTx.sign(key);
+    const kycResponse = await kycSigned.execute(client);
+    const kycReceipt = await kycResponse.getReceipt(client);
     return {
       ...txMeta(signed, receipt),
       token_id: tokenId,
@@ -225,14 +250,14 @@ async function cmdPublish() {
   if (parsed.schema !== "traceseal.audit.v1" || !parsed.event) {
     fail("BAD_MESSAGE", "audit message must have schema 'traceseal.audit.v1' and an event");
   }
-  const result = await withClient(async (client) => {
+  const result = await withClient(async (client, key) => {
     const tx = await new TopicMessageSubmitTransaction()
       .setTopicId(TOPIC_ID)
       .setMessage(message)
       .freezeWith(client);
-    const signed = await tx.sign(client.operatorPrivateKey ?? client.operatorKey);
-    const receipt = await signed.execute(client);
-    const rec = receipt;
+    const signed = await tx.sign(key);
+    const response = await signed.execute(client);
+    const rec = await response.getReceipt(client);
     return {
       ...txMeta(signed, rec),
       topic_id: TOPIC_ID,
@@ -252,14 +277,15 @@ async function cmdMint() {
   if (metadata.length > 100) {
     fail("METADATA_TOO_LARGE", "NFT metadata exceeds 100-byte limit");
   }
-  const result = await withClient(async (client) => {
+  const result = await withClient(async (client, key) => {
     const tx = await new TokenMintTransaction()
       .setTokenId(NFT_TOKEN_ID)
       .setMetadata([metadata])
       .freezeWith(client);
-    const signed = await tx.sign(client.operatorPrivateKey ?? client.operatorKey);
-    const receipt = await signed.execute(client);
-    const serials = receipt.serials || [];
+    const signed = await tx.sign(key);
+    const response = await signed.execute(client);
+    const receipt = await response.getReceipt(client);
+    const serials = receipt.serials || receipt.serialNumbers || [];
     return {
       ...txMeta(signed, receipt),
       token_id: NFT_TOKEN_ID,
