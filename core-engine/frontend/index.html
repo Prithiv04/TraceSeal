@@ -12,18 +12,18 @@
    Spacing: 4px base
    ============================================================ */
 :root{
-  --bg:#050B1B;
-  --bg-2:#071126;
-  --panel:#0A1630;
-  --panel-2:#0D1D3A;
-  --panel-3:#12244a;
-  --inset:#060d1f;
-  --border:rgba(0,212,255,.10);
-  --border-soft:rgba(0,212,255,.06);
-  --border-strong:rgba(0,212,255,.22);
+  --bg:#050B18;
+  --bg-2:#071226;
+  --panel:#0B1730;
+  --panel-2:#101F3D;
+  --panel-3:#16294F;
+  --inset:#040B1A;
+  --border:rgba(122,152,214,.10);
+  --border-soft:rgba(122,152,214,.06);
+  --border-strong:rgba(122,152,214,.22);
   --text:#F4F7FF;
   --muted:#9BAAC5;
-  --faint:#5f7194;
+  --faint:#7183A3;
   --primary:#1677FF;
   --primary-strong:#3d8bff;
   --cyan:#00D4FF;
@@ -116,7 +116,7 @@ nav a{
   display:flex;align-items:center;gap:var(--s3);
   padding:.6rem .75rem;border-radius:var(--r-sm);
   color:var(--muted);text-decoration:none;
-  font-size:var(--fs-small);font-weight:550;
+  font-size:var(--fs-small);font-weight:600;
   border:1px solid transparent;
   transition:background .18s,color .18s,border-color .18s,transform .18s;
   position:relative;
@@ -234,7 +234,7 @@ nav a.active::before{
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
   background:var(--primary);color:#fff;border:none;border-radius:var(--r-sm);
-  padding:.6rem 1.25rem;font-weight:650;font-size:var(--fs-small);
+  padding:.6rem 1.25rem;font-weight:700;font-size:var(--fs-small);
   cursor:pointer;text-decoration:none;line-height:1.2;
   transition:background .18s,box-shadow .18s,transform .12s,opacity .18s;
   box-shadow:0 4px 14px rgba(22,119,255,.28);
@@ -388,7 +388,7 @@ input.invalid{border-color:var(--err)}
   display:grid;place-items:center;
   font-size:var(--fs-meta);font-weight:700;color:var(--muted);font-family:var(--mono);
 }
-.lc-step .lc-title{font-size:var(--fs-small);font-weight:650;margin-top:var(--s2)}
+.lc-step .lc-title{font-size:var(--fs-small);font-weight:700;margin-top:var(--s2)}
 .lc-step .lc-desc{font-size:var(--fs-meta);color:var(--faint);margin-top:2px;line-height:1.5}
 .lc-step::after{
   content:"";position:absolute;top:14px;left:2.6rem;right:.4rem;height:1px;
@@ -407,6 +407,9 @@ input.invalid{border-color:var(--err)}
   color:var(--cyan);font-size:var(--fs-meta);font-weight:700;
   display:grid;place-items:center;font-family:var(--mono);
 }
+.step .num{transition:all .18s}
+.step .num.ok{color:var(--ok);border-color:var(--ok-border);background:var(--ok-dim)}
+.step .num.err{color:var(--err);border-color:var(--err-border);background:var(--err-dim)}
 .step .step-title{font-weight:600;font-size:var(--fs-small)}
 .step .step-desc{color:var(--muted);font-size:var(--fs-meta);margin-top:2px}
 
@@ -419,7 +422,7 @@ input.invalid{border-color:var(--err)}
   transition:border-color .18s;
 }
 .artifact-item:hover{border-color:var(--border-strong)}
-.artifact-item .a-name{font-family:var(--mono);font-size:var(--fs-small);font-weight:650}
+.artifact-item .a-name{font-family:var(--mono);font-size:var(--fs-small);font-weight:700}
 .artifact-item .a-hint{font-size:var(--fs-meta);color:var(--faint);margin-top:2px}
 .artifact-item .spacer{flex:1}
 .artifact-item a.dl{
@@ -439,7 +442,7 @@ input.invalid{border-color:var(--err)}
   transition:color .15s,border-color .15s;
 }
 .tabs button:hover{color:var(--text)}
-.tabs button.active{color:var(--cyan);border-bottom-color:var(--cyan);font-weight:650}
+.tabs button.active{color:var(--cyan);border-bottom-color:var(--cyan);font-weight:700}
 
 /* ================= Stats ================= */
 .stat-row{display:flex;gap:var(--s3);flex-wrap:wrap}
@@ -507,10 +510,51 @@ input.invalid{border-color:var(--err)}
 .doc-section .table-wrap{margin-top:var(--s4);max-width:100%}
 .doc-section .table-wrap + p{margin-top:var(--s4)}
 .endpoint-table td:first-child{white-space:nowrap}
+.doc-section{scroll-margin-top:calc(var(--topbar-h) + var(--s4))}
+.doc-index{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:var(--s2)}
+.doc-index a{
+  display:flex;align-items:baseline;gap:var(--s2);
+  padding:.55rem .8rem;border:1px solid var(--border-soft);border-radius:var(--r-sm);
+  color:var(--muted);font-size:var(--fs-small);text-decoration:none;
+  transition:all .18s;background:var(--panel-2);
+}
+.doc-index a:hover{color:var(--cyan);border-color:var(--border-strong);text-decoration:none;transform:translateY(-1px)}
+.doc-index a .n{font-family:var(--mono);font-size:var(--fs-meta);color:var(--cyan);flex-shrink:0}
+.codeblock{
+  font-family:var(--mono);font-size:var(--fs-meta);color:#cfe9ff;
+  background:var(--inset);border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:var(--s3) var(--s4);margin-top:var(--s3);overflow-x:auto;white-space:nowrap;
+}
+
+/* ================= Timeline ================= */
+.timeline{position:relative;margin-top:var(--s4);padding-left:var(--s5)}
+.timeline::before{
+  content:"";position:absolute;left:11px;top:8px;bottom:8px;width:2px;
+  background:var(--border);border-radius:1px;
+}
+.tl-item{position:relative;padding:0 0 var(--s4)}
+.tl-item:last-child{padding-bottom:0}
+.tl-dot{
+  position:absolute;left:-24px;top:2px;width:24px;height:24px;border-radius:50%;
+  background:var(--panel-3);border:1px solid var(--border-strong);
+  display:grid;place-items:center;color:var(--muted);
+}
+.tl-dot svg{width:12px;height:12px}
+.tl-item.original .tl-dot{background:var(--cyan-dim);border-color:var(--cyan);color:var(--cyan)}
+.tl-card{
+  border:1px solid var(--border-soft);border-radius:var(--r-md);
+  padding:var(--s4);background:var(--panel-2);
+  transition:border-color .18s;
+}
+.tl-card:hover{border-color:var(--border-strong)}
+.tl-head{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap}
+.tl-time{margin-left:auto;font-size:var(--fs-meta);color:var(--faint);font-family:var(--mono);white-space:nowrap}
+.tl-meta{display:flex;gap:var(--s4);flex-wrap:wrap;margin-top:var(--s3);font-size:var(--fs-meta);color:var(--muted)}
+.tl-meta b{color:var(--faint);font-weight:600;margin-right:.35rem}
 
 /* ================= Network status card ================= */
 .net-status{
-  display:flex;align-items:center;gap:var(--s4);
+  display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap;
   border:1px solid var(--border-soft);border-radius:var(--r-md);
   padding:var(--s4);background:var(--panel-2);margin-top:var(--s4);
 }
@@ -520,7 +564,7 @@ input.invalid{border-color:var(--err)}
   background:var(--purple-dim);border:1px solid rgba(121,92,255,.3);color:var(--purple);
 }
 .net-status .ns-ico svg{width:20px;height:20px}
-.net-status .ns-title{font-weight:650;font-size:var(--fs-small)}
+.net-status .ns-title{font-weight:700;font-size:var(--fs-small)}
 .net-status .ns-desc{font-size:var(--fs-meta);color:var(--faint);margin-top:2px}
 
 /* ================= Responsive ================= */
@@ -533,6 +577,8 @@ input.invalid{border-color:var(--err)}
   .topbar{padding:0 var(--s4)}
   .hero{padding:var(--s5) var(--s4)}
   .hero h1{font-size:1.5rem}
+  .net-status{flex-direction:column;align-items:flex-start}
+  .doc-index{grid-template-columns:1fr 1fr}
 }
 </style>
 </head>
@@ -624,10 +670,10 @@ input.invalid{border-color:var(--err)}
         <div class="card">
           <h2><svg class="h-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.5v3.5M8 5v.5"/></svg>What verification proves — and what it doesn't</h2>
           <div class="steps">
-            <div class="step"><div class="num">✓</div><div><div class="step-title">Cryptographic authenticity</div><div class="step-desc">The TLSNotary presentation proves a specific HTTPS exchange occurred with the fixture server, with only the disclosed fields revealed.</div></div></div>
-            <div class="step"><div class="num">✓</div><div><div class="step-title">Storage integrity</div><div class="step-desc">Artifact SHA-256 hashes are bound into the evidence record; any tampering breaks the commitment.</div></div></div>
-            <div class="step"><div class="num">✗</div><div><div class="step-title">Not proven: response truthfulness</div><div class="step-desc">Verification proves the bytes came from the server — not that the API's answer was correct.</div></div></div>
-            <div class="step"><div class="num">✗</div><div><div class="step-title">Not implemented: external timestamping</div><div class="step-desc">Hedera anchoring is planned, not live. The commitment is locally computed only.</div></div></div>
+            <div class="step"><div class="num ok">✓</div><div><div class="step-title">Cryptographic authenticity</div><div class="step-desc">The TLSNotary presentation proves a specific HTTPS exchange occurred with the fixture server, with only the disclosed fields revealed.</div></div></div>
+            <div class="step"><div class="num ok">✓</div><div><div class="step-title">Storage integrity</div><div class="step-desc">Artifact SHA-256 hashes are bound into the evidence record; any tampering breaks the commitment.</div></div></div>
+            <div class="step"><div class="num err">✗</div><div><div class="step-title">Not proven: response truthfulness</div><div class="step-desc">Verification proves the bytes came from the server — not that the API's answer was correct.</div></div></div>
+            <div class="step"><div class="num err">✗</div><div><div class="step-title">Not implemented: external timestamping</div><div class="step-desc">Hedera anchoring is planned, not live. The commitment is locally computed only.</div></div></div>
           </div>
         </div>
 
@@ -741,7 +787,13 @@ input.invalid{border-color:var(--err)}
           <div id="lookupStatus" class="status-line info" role="status" aria-live="polite"></div>
         </div>
 
-        <div id="evidenceDetail"></div>
+        <div id="evidenceDetail">
+          <div class="empty-block">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="34" height="34" style="display:block;margin:0 auto"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div>
+            <p>Enter a valid evidence ID to inspect a stored record.</p>
+            <p class="hint">There is no global listing endpoint — lookup requires the <code>ts1_</code> identifier from a submission receipt.</p>
+          </div>
+        </div>
       </section>
 
       <!-- ==================== HISTORY ==================== -->
@@ -778,17 +830,34 @@ input.invalid{border-color:var(--err)}
           <p class="page-sub">What TRACESEAL is, how verification works, and how to use this console and CLI.</p>
         </div>
 
-        <div class="card doc-section">
+        <div class="card">
+          <h2>Contents</h2>
+          <div class="doc-index">
+            <a href="#doc-01"><span class="n">01</span>What TRACESEAL is</a>
+            <a href="#doc-02"><span class="n">02</span>The problem it solves</a>
+            <a href="#doc-03"><span class="n">03</span>How TLSNotary verification works</a>
+            <a href="#doc-04"><span class="n">04</span>Evidence package format</a>
+            <a href="#doc-05"><span class="n">05</span>Evidence lifecycle</a>
+            <a href="#doc-06"><span class="n">06</span>Evidence ID and commitment</a>
+            <a href="#doc-07"><span class="n">07</span>API endpoints</a>
+            <a href="#doc-08"><span class="n">08</span>CLI usage</a>
+            <a href="#doc-09"><span class="n">09</span>Trust model</a>
+            <a href="#doc-10"><span class="n">10</span>Limitations</a>
+            <a href="#doc-11"><span class="n">11</span>Future: Hedera integration</a>
+          </div>
+        </div>
+
+        <div class="card doc-section" id="doc-01">
           <div class="doc-head"><span class="num">01</span><h2>What TRACESEAL is</h2></div>
           <p>TRACESEAL is a local-first system that converts a live HTTPS response into <strong>cryptographically verifiable evidence</strong>. It uses <a href="https://tlsnotary.org" target="_blank" rel="noopener">TLSNotary</a> MPC-TLS: a prover and a notary jointly produce an attestation of a TLS session, and a presentation selectively discloses only chosen response fields.</p>
         </div>
 
-        <div class="card doc-section">
+        <div class="card doc-section" id="doc-02">
           <div class="doc-head"><span class="num">02</span><h2>The problem it solves</h2></div>
           <p>APIs can claim anything in a response. TRACESEAL produces a proof that a specific HTTPS exchange happened with a specific server, revealing only the fields you choose — enabling audit trails, compliance evidence, and dispute resolution without exposing full transcripts.</p>
         </div>
 
-        <div class="card doc-section">
+        <div class="card doc-section" id="doc-03">
           <div class="doc-head"><span class="num">03</span><h2>How TLSNotary verification works</h2></div>
           <ol>
             <li><strong>Prove</strong> — <code>traceseal-core prove</code> connects to the fixture over MPC-TLS, requests a URL, and builds a presentation disclosing selected JSON fields.</li>
@@ -797,7 +866,7 @@ input.invalid{border-color:var(--err)}
           </ol>
         </div>
 
-        <div class="card doc-section">
+        <div class="card doc-section" id="doc-04">
           <div class="doc-head"><span class="num">04</span><h2>Evidence package format</h2></div>
           <p>Three files, submitted as multipart fields:</p>
           <div class="table-wrap"><table>
@@ -810,7 +879,7 @@ input.invalid{border-color:var(--err)}
           </table></div>
         </div>
 
-        <div class="card doc-section">
+        <div class="card doc-section" id="doc-05">
           <div class="doc-head"><span class="num">05</span><h2>Evidence lifecycle</h2></div>
           <div class="lifecycle">
             <div class="lc-step done"><div class="lc-dot">1</div><div class="lc-title">Submit</div><div class="lc-desc">multipart upload</div></div>
@@ -821,12 +890,12 @@ input.invalid{border-color:var(--err)}
           </div>
         </div>
 
-        <div class="card doc-section">
+        <div class="card doc-section" id="doc-06">
           <div class="doc-head"><span class="num">06</span><h2>Evidence ID and commitment</h2></div>
           <p>The evidence ID is <code>ts1_</code> + the first 64 hex chars of a SHA-256 over a <strong>domain-separated canonical payload</strong> (<code>TRACESEAL:EVIDENCE:V1\0</code> prefix, RFC 8785 JCS canonicalization). The commitment is the same hash prefixed <code>sha256:</code>. Both are deterministic: identical verified evidence always produces the same ID, and duplicate submissions return <code>already_present</code>.</p>
         </div>
 
-        <div class="card doc-section">
+        <div class="card doc-section" id="doc-07">
           <div class="doc-head"><span class="num">07</span><h2>API endpoints</h2></div>
           <div class="table-wrap endpoint-table"><table>
             <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
@@ -842,7 +911,7 @@ input.invalid{border-color:var(--err)}
           <p>Error responses use <code>{"error":{"code","message"}}</code> with codes: <code>INVALID_PACKAGE</code>, <code>INVALID_EVIDENCE_ID</code>, <code>INVALID_ARTIFACT_TYPE</code>, <code>PAYLOAD_TOO_LARGE</code>, <code>MALFORMED_MULTIPART</code>, <code>EVIDENCE_NOT_FOUND</code>, <code>EVIDENCE_CONFLICT</code>, <code>VERIFICATION_REJECTED</code>, <code>INVALID_VERIFIER_OUTPUT</code>, <code>VERIFIER_TIMEOUT</code>, <code>CONCURRENCY_LIMIT_REACHED</code>, <code>INTERNAL_ERROR</code>, <code>STORAGE_UNAVAILABLE</code>.</p>
         </div>
 
-        <div class="card doc-section">
+        <div class="card doc-section" id="doc-08">
           <div class="doc-head"><span class="num">08</span><h2>CLI usage</h2></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
@@ -855,9 +924,10 @@ input.invalid{border-color:var(--err)}
             </tbody>
           </table></div>
           <p>Requires <code>TRACESEAL_TEST_ATTESTOR_KEY</code> (64 hex chars) for the local test attestor — demo key material only, not production trust.</p>
+          <div class="codeblock">TRACESEAL_TEST_ATTESTOR_KEY=&lt;64-hex&gt; traceseal-core serve --bind 127.0.0.1:3000 --storage-dir demo-store</div>
         </div>
 
-        <div class="card doc-section">
+        <div class="card doc-section" id="doc-09">
           <div class="doc-head"><span class="num">09</span><h2>Trust model</h2></div>
           <ul>
             <li><strong>Demo attestor key</strong> — a fixed public test key signs attestations. Anyone can forge attestations with it; it is not production trust.</li>
@@ -867,7 +937,7 @@ input.invalid{border-color:var(--err)}
           </ul>
         </div>
 
-        <div class="card doc-section">
+        <div class="card doc-section" id="doc-10">
           <div class="doc-head"><span class="num">10</span><h2>Limitations</h2></div>
           <ul>
             <li>Single-user local deployment — no authentication, no multi-user ownership.</li>
@@ -878,7 +948,7 @@ input.invalid{border-color:var(--err)}
           </ul>
         </div>
 
-        <div class="card doc-section">
+        <div class="card doc-section" id="doc-11">
           <div class="doc-head"><span class="num">11</span><h2>Future: Hedera integration</h2></div>
           <p>Planned: anchor the evidence commitment to Hedera HCS so the commitment is timestamped by a public ledger. Requires HBAR-funded operator credentials, a topic ID, and mirror-node lookup for comparison. <strong>Not implemented</strong> — no testnet transactions exist yet.</p>
         </div>
@@ -943,6 +1013,40 @@ function copyBtn(text) {
 }
 function badge(text, cls) {
   return el("span", "badge " + (cls || text), text);
+}
+const ICON_SHIELD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3z"/><path d="m9 12 2 2 4-4"/></svg>';
+const ICON_REFRESH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>';
+function renderTimeline(rows) {
+  const wrap = el("div", "timeline");
+  for (const [kind, r] of rows) {
+    const item = el("div", "tl-item " + kind);
+    const dot = el("div", "tl-dot");
+    dot.innerHTML = kind === "original" ? ICON_SHIELD : ICON_REFRESH;
+    item.appendChild(dot);
+    const card = el("div", "tl-card");
+    const head = el("div", "tl-head");
+    head.appendChild(badge(kind === "original" ? "Original verification" : "Re-verification"));
+    head.appendChild(badge(r.verification_status || "?"));
+    head.appendChild(el("span", "tl-time", fmtTime(r.verified_at)));
+    card.appendChild(head);
+    const meta = el("div", "tl-meta");
+    const fields = [
+      ["Verifier", (r.verifier && r.verifier.version) || "—"],
+      ["HTTP status", r.http_status != null ? String(r.http_status) : "—"],
+      ["Proof format", r.proof_format || "—"],
+      ["TLSNotary", r.tlsnotary_version || "—"],
+    ];
+    for (const [k, v] of fields) {
+      const s = el("span");
+      s.appendChild(el("b", null, k));
+      s.appendChild(document.createTextNode(v));
+      meta.appendChild(s);
+    }
+    card.appendChild(meta);
+    item.appendChild(card);
+    wrap.appendChild(item);
+  }
+  return wrap;
 }
 
 async function api(path, options) {
@@ -1446,21 +1550,7 @@ function renderEvidenceDetail(meta, history) {
   if (!rows.length) {
     hp.appendChild(el("p", "empty-text", "No verification records."));
   } else {
-    const wrap = el("div", "table-wrap");
-    const t = el("table");
-    const th = el("thead"); const thr = el("tr");
-    for (const h of ["Kind", "Status", "Verified at", "Verifier"]) thr.appendChild(el("th", null, h));
-    th.appendChild(thr); t.appendChild(th);
-    const tb = el("tbody");
-    for (const [kind, r] of rows) {
-      const tr = el("tr");
-      const tdK = el("td"); tdK.appendChild(badge(kind)); tr.appendChild(tdK);
-      const tdS = el("td"); tdS.appendChild(badge(r.verification_status || "?")); tr.appendChild(tdS);
-      tr.appendChild(el("td", null, fmtTime(r.verified_at)));
-      tr.appendChild(el("td", null, (r.verifier && r.verifier.version) || "—"));
-      tb.appendChild(tr);
-    }
-    t.appendChild(tb); wrap.appendChild(t); hp.appendChild(wrap);
+    hp.appendChild(renderTimeline(rows));
   }
   const br = el("div", "btn-row");
   const rv = el("button", "btn secondary", "Re-verify proof");
@@ -1538,22 +1628,7 @@ $("historyBtn").addEventListener("click", () => {
       for (const r of h.reverifications || []) rows.push(["reverification", r]);
       if (!rows.length) { card.appendChild(el("p", "empty-text", "No verification records.")); }
       else {
-        const wrap = el("div", "table-wrap");
-        const t = el("table");
-        const th = el("thead"); const thr = el("tr");
-        for (const h2 of ["Kind", "Status", "Verified at", "Verifier version", "HTTP status"]) thr.appendChild(el("th", null, h2));
-        th.appendChild(thr); t.appendChild(th);
-        const tb = el("tbody");
-        for (const [kind, r] of rows) {
-          const tr = el("tr");
-          const tdK = el("td"); tdK.appendChild(badge(kind)); tr.appendChild(tdK);
-          const tdS = el("td"); tdS.appendChild(badge(r.verification_status || "?")); tr.appendChild(tdS);
-          tr.appendChild(el("td", null, fmtTime(r.verified_at)));
-          tr.appendChild(el("td", null, (r.verifier && r.verifier.version) || "—"));
-          tr.appendChild(el("td", null, r.http_status != null ? String(r.http_status) : "—"));
-          tb.appendChild(tr);
-        }
-        t.appendChild(tb); wrap.appendChild(t); card.appendChild(wrap);
+        card.appendChild(renderTimeline(rows));
       }
       const br = el("div", "btn-row");
       const open = el("a", "btn secondary", "Open in explorer");
